@@ -1,7 +1,21 @@
 alias i := install
 
-dev:
-    @npm run dev
+set shell := ["bash", "-cu"]
+
+api_url := env("PUBLIC_API_URL", "http://127.0.0.1:50051")
+
+dev: proto install
+    @env PUBLIC_API_URL="{{api_url}}" npm run dev
 
 install:
-    @npm install
+    @stamp="node_modules/.cache/taptime_web/npm-install.stamp"; \
+    if [ ! -d node_modules ] || [ ! -f "$stamp" ] || [ package.json -nt "$stamp" ] || [ package-lock.json -nt "$stamp" ] || [ ../taptime_proto/package.json -nt "$stamp" ] || [ ../taptime_proto/package-lock.json -nt "$stamp" ]; then \
+        npm install; \
+        mkdir -p "$(dirname "$stamp")"; \
+        touch "$stamp"; \
+    else \
+        echo "taptime_web npm dependencies are up to date"; \
+    fi
+
+proto:
+    @just -f ../Justfile -d .. generate-proto-if-needed

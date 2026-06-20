@@ -1,6 +1,8 @@
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { PUBLIC_API_URL } from "$env/static/public";
+import { env } from "$env/dynamic/public";
+
+const apiUrl = env.PUBLIC_API_URL ?? "http://127.0.0.1:50051";
 
 export const transport = createGrpcWebTransport({
-  baseUrl: PUBLIC_API_URL,
+  baseUrl: apiUrl,
 });

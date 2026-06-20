@@ -101,7 +101,7 @@
     loading = true;
     loadError = null;
     try {
-      day = await StoreService.getDay(StoreService.todayProtoDate(tz));
+      day = await StoreService.getDay(StoreService.currentDate(tz));
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -112,8 +112,8 @@
   async function handleCheckInOut() {
     submitting = true;
     try {
-      const date = StoreService.todayProtoDate(tz);
-      const time = StoreService.nowLocalTime(tz);
+      const date = StoreService.currentDate(tz);
+      const time = StoreService.currentTime(tz);
       if (isCheckedIn) {
         await StoreService.addCheckOut(date, time);
       } else {
