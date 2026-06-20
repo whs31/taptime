@@ -67,28 +67,31 @@
   // Reads directly from $state `day` — avoids stale $derived reads from setInterval.
   function computeWorkSeconds(d: Day | null): number {
     if (!d) return 0;
-    const evts = d.events;
-    if (!evts.length) return 0;
 
-    const firstInEvt = evts.find((e) => e.eventType.case === "checkIn");
-    if (!firstInEvt || firstInEvt.eventType.case !== "checkIn") return 0;
-    const checkInSecs = ltToSeconds(firstInEvt.eventType.value);
-    const lunchSecs = Number(d.lunchBreakDuration?.seconds ?? 0n);
+    let total = 0;
+    let openCheckInSecs: number | null = null;
 
-    const lastEvt = evts[evts.length - 1];
-    if (lastEvt.eventType.case === "checkIn") {
-      const { h, m, s } = tzTimeParts(getTz());
-      return Math.max(0, h * 3600 + m * 60 + s - checkInSecs);
+    for (const event of d.events) {
+      if (event.eventType.case === "checkIn") {
+        openCheckInSecs = ltToSeconds(event.eventType.value);
+        continue;
+      }
+
+      if (event.eventType.case === "checkOut" && openCheckInSecs !== null) {
+        total += Math.max(
+          0,
+          ltToSeconds(event.eventType.value) - openCheckInSecs,
+        );
+        openCheckInSecs = null;
+      }
     }
 
-    const lastOutEvt = [...evts]
-      .reverse()
-      .find((e) => e.eventType.case === "checkOut");
-    if (!lastOutEvt || lastOutEvt.eventType.case !== "checkOut") return 0;
-    return Math.max(
-      0,
-      ltToSeconds(lastOutEvt.eventType.value) - checkInSecs - lunchSecs,
-    );
+    if (openCheckInSecs !== null) {
+      const { h, m, s } = tzTimeParts(getTz());
+      total += Math.max(0, h * 3600 + m * 60 + s - openCheckInSecs);
+    }
+
+    return total;
   }
 
   function tick() {
