@@ -78,7 +78,7 @@
     const lastEvt = evts[evts.length - 1];
     if (lastEvt.eventType.case === "checkIn") {
       const { h, m, s } = tzTimeParts(getTz());
-      return Math.max(0, h * 3600 + m * 60 + s - checkInSecs - lunchSecs);
+      return Math.max(0, h * 3600 + m * 60 + s - checkInSecs);
     }
 
     const lastOutEvt = [...evts]
@@ -120,6 +120,7 @@
         await StoreService.addCheckIn(date, time);
       }
       await loadDay();
+      tick();
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
