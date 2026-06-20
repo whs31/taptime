@@ -5,6 +5,7 @@
   import { Progress } from "$lib/components/ui/progress/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
+  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { userStore } from "$lib/stores";
   import { StoreService } from "$lib/services";
   import CalendarXIcon from "@lucide/svelte/icons/calendar-x";
@@ -45,6 +46,7 @@
   let dashboard = $state<DashboardResponse | null>(null);
   let loadError = $state<string | null>(null);
   let loading = $state(true);
+  let refreshing = $state(false);
   let submitting = $state(false);
   let flagUpdating = $state(false);
   let loadedWindowKey = $state("");
@@ -323,27 +325,39 @@
     workSeconds = computeWorkSeconds(day);
   }
 
-  async function loadDashboard() {
-    loading = true;
+  async function loadDashboard(background = dashboard !== null) {
+    if (background) {
+      refreshing = true;
+    } else {
+      loading = true;
+    }
     loadError = null;
     try {
       const window = dashboardWindow(tz);
-      dashboard = await StoreService.getDashboard(
+      const nextDashboard = await StoreService.getDashboard(
         window.rangeStart,
         window.rangeEnd,
         window.monthStart,
         window.monthEnd,
         window.today,
       );
-      if (selectedDayKey === null || !summaryByDay.has(selectedDayKey)) {
+      const nextSummaryByDay = buildSummaryMap(nextDashboard.days);
+      dashboard = nextDashboard;
+      if (selectedDayKey === null || !nextSummaryByDay.has(selectedDayKey)) {
         selectedDayKey = window.today.daysSinceEpoch;
       }
       tick();
     } catch (e) {
-      dashboard = null;
+      if (!background) {
+        dashboard = null;
+      }
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
-      loading = false;
+      if (background) {
+        refreshing = false;
+      } else {
+        loading = false;
+      }
     }
   }
 
@@ -357,7 +371,7 @@
       } else {
         await StoreService.addCheckIn(date, time);
       }
-      await loadDashboard();
+      await loadDashboard(true);
       tick();
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
@@ -373,7 +387,7 @@
     try {
       await StoreService.setFlag(date, DayFlag.DAY_OFF);
       selectedDayKey = date.daysSinceEpoch;
-      await loadDashboard();
+      await loadDashboard(true);
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -387,7 +401,7 @@
     flagUpdating = true;
     try {
       await StoreService.setFlag(selected.date, flag);
-      await loadDashboard();
+      await loadDashboard(true);
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -444,6 +458,16 @@
     if (hasFlag(summary, DayFlag.DAY_OFF)) labels.push("Day off");
     if (hasFlag(summary, DayFlag.VACATION)) labels.push("Vacation");
     return labels.length > 0 ? labels.join(", ") : "Regular day";
+  }
+
+  function activityTooltip(summary: DaySummary) {
+    return `${dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)} - ${dayKindLabel(summary)} - ${balanceLabel(summary)}`;
+  }
+
+  function takeDayOffTooltip() {
+    if (hasCheckInToday) return "Unavailable after check-in";
+    if (todayIsDayOff) return "Today is already marked as a day off";
+    return "Mark today as a day off";
   }
 
   function buildCalendarCells(items: DaySummary[]): CalendarCell[] {
@@ -648,7 +672,7 @@
   });
 </script>
 
-<div class="py-4 flex flex-col gap-6">
+<div class="py-4 flex flex-col gap-6" aria-busy={loading || refreshing}>
   <div class="flex flex-col gap-1">
     <h2 class="text-2xl font-semibold">Dashboard</h2>
     <p class="text-muted-foreground text-sm">
@@ -717,18 +741,25 @@
                 Check In
               {/if}
             </Button>
-            <Button
-              onclick={handleTakeDayOff}
-              disabled={takeDayOffDisabled}
-              variant="secondary"
-              class="w-full sm:w-40"
-              title={hasCheckInToday
-                ? "Unavailable after check-in"
-                : takeDayOffLabel}
-            >
-              <CalendarXIcon />
-              {takeDayOffLabel}
-            </Button>
+            <Tooltip.Root>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    onclick={handleTakeDayOff}
+                    disabled={takeDayOffDisabled}
+                    variant="secondary"
+                    class="w-full sm:w-40"
+                  >
+                    <CalendarXIcon />
+                    {takeDayOffLabel}
+                  </Button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content sideOffset={6}>
+                {takeDayOffTooltip()}
+              </Tooltip.Content>
+            </Tooltip.Root>
           </div>
         </div>
 
@@ -837,26 +868,37 @@
           >
             {#each calendarCells as summary}
               {#if summary?.day}
-                <button
-                  type="button"
-                  class="relative size-[13px] rounded-[3px] border border-border/40 outline-none transition-transform hover:scale-125 focus-visible:ring-2 focus-visible:ring-ring {selectedDayKey ===
-                  summary.day.date?.daysSinceEpoch
-                    ? 'ring-2 ring-ring'
-                    : ''}"
-                  style={calendarCellStyle(summary)}
-                  title={`${dateLabel(summary.day.date?.daysSinceEpoch ?? 0)} - ${dayKindLabel(summary)} - ${balanceLabel(summary)}`}
-                  onclick={() => (selectedDayKey = summary.day?.date?.daysSinceEpoch ?? null)}
-                >
-                  <span class="sr-only">
-                    {dateLabel(summary.day.date?.daysSinceEpoch ?? 0)}
-                  </span>
-                  {#each calendarDots(summary) as color}
-                    <span
-                      class="absolute bottom-[1px] right-[1px] size-[4px] rounded-full border border-background"
-                      style={`background-color: ${color};`}
-                    ></span>
-                  {/each}
-                </button>
+                <Tooltip.Root>
+                  <Tooltip.Trigger>
+                    {#snippet child({ props })}
+                      <button
+                        {...props}
+                        type="button"
+                        class="relative size-[13px] rounded-[3px] border border-border/40 outline-none transition-colors hover:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card {selectedDayKey ===
+                        summary.day?.date?.daysSinceEpoch
+                          ? 'shadow-[inset_0_0_0_2px_var(--ring)]'
+                          : ''}"
+                        style={calendarCellStyle(summary)}
+                        onclick={() =>
+                          (selectedDayKey =
+                            summary.day?.date?.daysSinceEpoch ?? null)}
+                      >
+                        <span class="sr-only">
+                          {dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)}
+                        </span>
+                        {#each calendarDots(summary) as color}
+                          <span
+                            class="absolute bottom-[1px] right-[1px] size-[4px] rounded-full border border-background"
+                            style={`background-color: ${color};`}
+                          ></span>
+                        {/each}
+                      </button>
+                    {/snippet}
+                  </Tooltip.Trigger>
+                  <Tooltip.Content sideOffset={6}>
+                    {activityTooltip(summary)}
+                  </Tooltip.Content>
+                </Tooltip.Root>
               {:else}
                 <span class="size-[13px]"></span>
               {/if}
