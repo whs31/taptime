@@ -7,6 +7,9 @@
   import * as Switch from "$lib/components/ui/switch/index.js";
   import { userStore } from "$lib/stores";
   import { StoreService } from "$lib/services";
+  import CalendarXIcon from "@lucide/svelte/icons/calendar-x";
+  import LogInIcon from "@lucide/svelte/icons/log-in";
+  import LogOutIcon from "@lucide/svelte/icons/log-out";
   import { DayFlag, type Day } from "@taptime/proto/taptime/day_pb.js";
   import type { Balance } from "@taptime/proto/taptime/balance_pb.js";
   import type { Event } from "@taptime/proto/taptime/event_pb.js";
@@ -59,6 +62,14 @@
   const isCheckedIn = $derived(
     events.length > 0 && events[events.length - 1].eventType.case === "checkIn",
   );
+  const hasCheckInToday = $derived(
+    events.some((event) => event.eventType.case === "checkIn"),
+  );
+  const todayIsDayOff = $derived(hasFlag(todaySummary, DayFlag.DAY_OFF));
+  const takeDayOffDisabled = $derived(
+    loading || submitting || flagUpdating || hasCheckInToday || todayIsDayOff,
+  );
+  const takeDayOffLabel = $derived(todayIsDayOff ? "Day Off Set" : "Take Day Off");
   const requiredSeconds = $derived(durationSeconds(day?.requiredWorkHours));
   const progressPercent = $derived(
     requiredSeconds > 0
@@ -355,6 +366,21 @@
     }
   }
 
+  async function handleTakeDayOff() {
+    if (takeDayOffDisabled) return;
+    const date = day?.date ?? StoreService.currentDate(tz);
+    flagUpdating = true;
+    try {
+      await StoreService.setFlag(date, DayFlag.DAY_OFF);
+      selectedDayKey = date.daysSinceEpoch;
+      await loadDashboard();
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      flagUpdating = false;
+    }
+  }
+
   async function toggleSelectedFlag(flag: DayFlag) {
     const selected = selectedSummary?.day;
     if (!selected?.date) return;
@@ -431,35 +457,47 @@
     return cells;
   }
 
+  function themeMix(token: string, amount: number, base = "var(--card)") {
+    return `color-mix(in oklch, var(${token}) ${amount.toFixed(1)}%, ${base})`;
+  }
+
+  function activityCell(color: string) {
+    return [
+      `--activity-cell-bg: ${color}`,
+      "background-color: var(--activity-cell-bg)",
+      "border-color: color-mix(in oklch, var(--activity-cell-bg) 45%, var(--border))",
+    ].join("; ");
+  }
+
   function calendarCellStyle(summary: DaySummary | null) {
     if (!summary?.day) return "background-color: transparent;";
     if (hasFlag(summary, DayFlag.DAY_OFF)) {
-      return "background-color: hsl(220 9% 78%);";
+      return activityCell(themeMix("--muted-foreground", 28));
     }
     if (hasFlag(summary, DayFlag.VACATION)) {
-      return "background-color: hsl(38 92% 60%);";
+      return activityCell(themeMix("--primary", 48));
     }
     if (hasFlag(summary, DayFlag.REMOTE)) {
-      return "background-color: hsl(217 91% 60%);";
+      return activityCell(themeMix("--chart-3", 58));
     }
     if (hasFlag(summary, DayFlag.WEEKEND)) {
       return summary.fullDayWorked
-        ? "background-color: hsl(271 81% 56%);"
-        : "background-color: hsl(220 14% 90%);";
+        ? activityCell(themeMix("--chart-5", 68))
+        : activityCell(themeMix("--muted", 78));
     }
     if (summary.skipped) {
-      return "background-color: hsl(0 84% 48%);";
+      return activityCell(themeMix("--destructive", 66));
     }
 
     const delta = liveBalanceSeconds(summary);
     const required = Math.max(1, durationSeconds(summary.day.requiredWorkHours));
     if (delta < 0) {
       const amount = Math.min(1, Math.abs(delta) / required);
-      return `background-color: hsl(0 ${45 + amount * 39}% ${88 - amount * 35}%);`;
+      return activityCell(themeMix("--destructive", 30 + amount * 36));
     }
 
     const amount = Math.min(1, delta / required);
-    return `background-color: hsl(142 ${32 + amount * 46}% ${88 - amount * 36}%);`;
+    return activityCell(themeMix("--chart-1", 26 + amount * 40));
   }
 
   function calendarDots(summary: DaySummary | null) {
@@ -467,12 +505,12 @@
     const dots: string[] = [];
     const clocked = summaryClockedSeconds(summary);
     if (hasFlag(summary, DayFlag.VACATION) && summary.fullDayWorked) {
-      dots.push("hsl(271 81% 56%)");
+      dots.push("var(--chart-5)");
     } else if (
       (hasFlag(summary, DayFlag.REMOTE) || hasFlag(summary, DayFlag.DAY_OFF)) &&
       clocked > 0
     ) {
-      dots.push("hsl(142 69% 45%)");
+      dots.push("var(--chart-1)");
     }
     return dots;
   }
@@ -593,6 +631,16 @@
     return hasFlag(selectedSummary, flag);
   }
 
+  function selectedFlagDisabled(flag: DayFlag) {
+    if (flag !== DayFlag.DAY_OFF || !selectedSummary?.day) return false;
+    return (
+      dayKey(selectedSummary.day) === todayDays &&
+      selectedSummary.day.events.some(
+        (event) => event.eventType.case === "checkIn",
+      )
+    );
+  }
+
   onMount(() => {
     tick();
     const interval = setInterval(tick, 1000);
@@ -649,20 +697,39 @@
             </div>
           </div>
 
-          <Button
-            onclick={handleCheckInOut}
-            disabled={submitting || loading}
-            variant={isCheckedIn ? "outline" : "default"}
-            class="w-full sm:w-40"
-          >
-            {#if submitting}
-              ...
-            {:else if isCheckedIn}
-              Check Out
-            {:else}
-              Check In
-            {/if}
-          </Button>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <Button
+              onclick={handleCheckInOut}
+              disabled={submitting || loading}
+              variant={isCheckedIn ? "outline" : "default"}
+              class="w-full sm:w-40"
+            >
+              {#if isCheckedIn}
+                <LogOutIcon />
+              {:else}
+                <LogInIcon />
+              {/if}
+              {#if submitting}
+                ...
+              {:else if isCheckedIn}
+                Check Out
+              {:else}
+                Check In
+              {/if}
+            </Button>
+            <Button
+              onclick={handleTakeDayOff}
+              disabled={takeDayOffDisabled}
+              variant="secondary"
+              class="w-full sm:w-40"
+              title={hasCheckInToday
+                ? "Unavailable after check-in"
+                : takeDayOffLabel}
+            >
+              <CalendarXIcon />
+              {takeDayOffLabel}
+            </Button>
+          </div>
         </div>
 
         <div class="flex min-h-40 flex-col gap-3">
@@ -733,7 +800,9 @@
               <span class="text-sm">{control.label}</span>
               <Switch.Root
                 checked={selectedHasFlag(control.flag)}
-                disabled={flagUpdating || !selectedSummary}
+                disabled={
+                  flagUpdating || !selectedSummary || selectedFlagDisabled(control.flag)
+                }
                 onclick={() => toggleSelectedFlag(control.flag)}
               />
             </div>
@@ -868,13 +937,13 @@
             <path
               d={linePath(chartModel.firstLine, chartModel.daysInMonth)}
               fill="none"
-              stroke="hsl(142 69% 45%)"
+              stroke="var(--chart-1)"
               stroke-width="2"
             />
             <path
               d={linePath(chartModel.lastLine, chartModel.daysInMonth)}
               fill="none"
-              stroke="hsl(0 84% 60%)"
+              stroke="var(--destructive)"
               stroke-width="2"
             />
 
@@ -884,8 +953,8 @@
                 cy={chartY(point.seconds)}
                 r={point.kind === "checkIn" ? 3 : 3.5}
                 fill={point.kind === "checkIn"
-                  ? "hsl(142 69% 45%)"
-                  : "hsl(0 84% 60%)"}
+                  ? "var(--chart-1)"
+                  : "var(--destructive)"}
               >
                 <title>{point.label}</title>
               </circle>
@@ -894,11 +963,17 @@
         </div>
         <div class="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
           <span class="inline-flex items-center gap-2">
-            <span class="size-2 rounded-full bg-green-500"></span>
+            <span
+              class="size-2 rounded-full"
+              style="background-color: var(--chart-1);"
+            ></span>
             First check-in
           </span>
           <span class="inline-flex items-center gap-2">
-            <span class="size-2 rounded-full bg-red-500"></span>
+            <span
+              class="size-2 rounded-full"
+              style="background-color: var(--destructive);"
+            ></span>
             Last checkout and checkouts
           </span>
         </div>
