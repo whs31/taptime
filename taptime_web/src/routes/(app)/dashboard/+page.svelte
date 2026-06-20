@@ -2,19 +2,26 @@
   import { onMount } from "svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Label } from "$lib/components/ui/label/index.js";
+  import * as Popover from "$lib/components/ui/popover/index.js";
   import { Progress } from "$lib/components/ui/progress/index.js";
+  import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
+  import * as Select from "$lib/components/ui/select/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { userStore } from "$lib/stores";
   import { StoreService } from "$lib/services";
   import CalendarXIcon from "@lucide/svelte/icons/calendar-x";
+  import PlusIcon from "@lucide/svelte/icons/plus";
   import LogInIcon from "@lucide/svelte/icons/log-in";
   import LogOutIcon from "@lucide/svelte/icons/log-out";
   import { DayFlag, type Day } from "@taptime/proto/taptime/day_pb.js";
   import type { Balance } from "@taptime/proto/taptime/balance_pb.js";
   import type { Event } from "@taptime/proto/taptime/event_pb.js";
   import { Date as ProtoDate } from "@taptime/proto/taptime/date_pb.js";
+  import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
   import type {
     DashboardResponse,
     DaySummary,
@@ -37,6 +44,8 @@
     kind: "checkIn" | "checkOut";
     label: string;
   };
+  type ManualTarget = "today" | "selected";
+  type ManualEventType = "checkIn" | "checkOut";
 
   const tz = $derived(
     userStore.user?.timeZone?.timeZone ??
@@ -49,6 +58,11 @@
   let refreshing = $state(false);
   let submitting = $state(false);
   let flagUpdating = $state(false);
+  let manualEventOpen = $state(false);
+  let manualSubmitting = $state(false);
+  let manualTarget = $state<ManualTarget>("today");
+  let manualEventType = $state<ManualEventType>("checkIn");
+  let manualTime = $state("");
   let loadedWindowKey = $state("");
   let selectedDayKey = $state<number | null>(null);
 
@@ -69,7 +83,12 @@
   );
   const todayIsDayOff = $derived(hasFlag(todaySummary, DayFlag.DAY_OFF));
   const takeDayOffDisabled = $derived(
-    loading || submitting || flagUpdating || hasCheckInToday || todayIsDayOff,
+    loading ||
+      submitting ||
+      flagUpdating ||
+      manualSubmitting ||
+      hasCheckInToday ||
+      todayIsDayOff,
   );
   const takeDayOffLabel = $derived(todayIsDayOff ? "Day Off Set" : "Take Day Off");
   const requiredSeconds = $derived(durationSeconds(day?.requiredWorkHours));
@@ -95,6 +114,44 @@
     }),
   );
   const chartModel = $derived(buildChartModel(monthSummaries, todayDays));
+  const selectedManualTargetAvailable = $derived(
+    Boolean(
+      selectedSummary?.day?.date &&
+        selectedSummary.day.date.daysSinceEpoch !== todayDays,
+    ),
+  );
+  const manualTargetSummary = $derived(
+    manualTarget === "selected" && selectedManualTargetAvailable
+      ? selectedSummary
+      : todaySummary,
+  );
+  const manualTargetDate = $derived(
+    manualTarget === "selected" && selectedManualTargetAvailable
+      ? selectedSummary?.day?.date
+      : (day?.date ?? StoreService.currentDate(tz)),
+  );
+  const manualTargetLabel = $derived(
+    manualTarget === "selected" && selectedManualTargetAvailable
+      ? `Selected day (${dateLabel(selectedSummary?.day?.date?.daysSinceEpoch ?? todayDays, true)})`
+      : `Today (${dateLabel(todayDays, true)})`,
+  );
+  const validManualEventType = $derived(
+    nextManualEventType(manualTargetSummary?.day?.events ?? []),
+  );
+  const manualEventTypeLabel = $derived(
+    manualEventType === "checkIn" ? "Check In" : "Check Out",
+  );
+  const parsedManualTime = $derived(parseManualTime(manualTime));
+  const manualSubmitDisabled = $derived(
+      manualSubmitting ||
+      submitting ||
+      flagUpdating ||
+      loading ||
+      refreshing ||
+      !manualTargetDate ||
+      !parsedManualTime ||
+      manualEventType !== validManualEventType,
+  );
 
   const flagControls = [
     { flag: DayFlag.WEEKEND, label: "Weekend" },
@@ -116,6 +173,16 @@
     if (key !== loadedWindowKey) {
       loadedWindowKey = key;
       void loadDashboard();
+    }
+  });
+
+  $effect(() => {
+    if (manualTarget === "selected" && !selectedManualTargetAvailable) {
+      manualTarget = "today";
+    }
+    const nextType = nextManualEventType(manualTargetSummary?.day?.events ?? []);
+    if (manualEventType !== nextType) {
+      manualEventType = nextType;
     }
   });
 
@@ -161,8 +228,8 @@
     );
   }
 
-  function utcDayOfWeek(daysSinceEpoch: number) {
-    return new Date(daysSinceEpoch * MS_PER_DAY).getUTCDay();
+  function mondayFirstDayOfWeek(daysSinceEpoch: number) {
+    return (new Date(daysSinceEpoch * MS_PER_DAY).getUTCDay() + 6) % 7;
   }
 
   function dateLabel(daysSinceEpoch: number, compact = false) {
@@ -252,6 +319,43 @@
   function formatTime(seconds: number | null) {
     if (seconds === null) return "--:--";
     return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor((seconds % 3600) / 60))}`;
+  }
+
+  function currentManualTimeValue() {
+    const { h, m } = tzTimeParts(getTz());
+    return `${pad(h)}:${pad(m)}`;
+  }
+
+  function parseManualTime(value: string): LocalTime | null {
+    const match = /^(\d{2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return new LocalTime({ hour, minute, second: 0 });
+  }
+
+  function nextManualEventType(events: Event[]): ManualEventType {
+    return events.length > 0 &&
+      events[events.length - 1].eventType.case === "checkIn"
+      ? "checkOut"
+      : "checkIn";
+  }
+
+  function manualEventTypeAllowed(type: ManualEventType) {
+    return type === validManualEventType;
+  }
+
+  function resetManualEventForm(target: ManualTarget = "today") {
+    manualTarget =
+      target === "selected" && selectedManualTargetAvailable ? "selected" : "today";
+    manualEventType = nextManualEventType(
+      (manualTarget === "selected" && selectedManualTargetAvailable
+        ? selectedSummary
+        : todaySummary
+      )?.day?.events ?? [],
+    );
+    manualTime = currentManualTimeValue();
   }
 
   function computeWorkSeconds(d: Day | null): number {
@@ -380,6 +484,29 @@
     }
   }
 
+  async function handleManualEventSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    if (manualSubmitDisabled || !manualTargetDate || !parsedManualTime) return;
+    manualSubmitting = true;
+    try {
+      if (manualEventType === "checkIn") {
+        await StoreService.addCheckIn(manualTargetDate, parsedManualTime);
+      } else {
+        await StoreService.addCheckOut(manualTargetDate, parsedManualTime);
+      }
+      if (manualTarget === "selected") {
+        selectedDayKey = manualTargetDate.daysSinceEpoch;
+      }
+      manualEventOpen = false;
+      await loadDashboard(true);
+      tick();
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      manualSubmitting = false;
+    }
+  }
+
   async function handleTakeDayOff() {
     if (takeDayOffDisabled) return;
     const date = day?.date ?? StoreService.currentDate(tz);
@@ -475,7 +602,9 @@
     const cells: CalendarCell[] = [];
     const first = dayKey(items[0].day);
     if (first !== null) {
-      for (let i = 0; i < utcDayOfWeek(first); i += 1) cells.push(null);
+      for (let i = 0; i < mondayFirstDayOfWeek(first); i += 1) {
+        cells.push(null);
+      }
     }
     cells.push(...items);
     return cells;
@@ -721,12 +850,12 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-2 sm:flex-row">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               onclick={handleCheckInOut}
-              disabled={submitting || loading}
+              disabled={submitting || loading || manualSubmitting}
               variant={isCheckedIn ? "outline" : "default"}
-              class="w-full sm:w-40"
+              class="w-full sm:w-36"
             >
               {#if isCheckedIn}
                 <LogOutIcon />
@@ -749,7 +878,7 @@
                     onclick={handleTakeDayOff}
                     disabled={takeDayOffDisabled}
                     variant="secondary"
-                    class="w-full sm:w-40"
+                    class="w-full sm:w-36"
                   >
                     <CalendarXIcon />
                     {takeDayOffLabel}
@@ -760,6 +889,125 @@
                 {takeDayOffTooltip()}
               </Tooltip.Content>
             </Tooltip.Root>
+            <Popover.Root bind:open={manualEventOpen}>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    onclick={() => resetManualEventForm("today")}
+                    disabled={loading || submitting || flagUpdating || manualSubmitting}
+                    variant="secondary"
+                    class="w-full sm:w-36"
+                  >
+                    <PlusIcon />
+                    Add Event
+                  </Button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content align="start" sideOffset={8} class="w-80">
+                <form class="flex flex-col gap-4" onsubmit={handleManualEventSubmit}>
+                  <div class="flex flex-col gap-1">
+                    <div class="font-medium">Add Event</div>
+                    <div class="text-muted-foreground text-xs">
+                      Add a manual check-in or checkout with minute precision.
+                    </div>
+                  </div>
+
+                  <div class="grid gap-2">
+                    <Label for="manual-event-target">Day</Label>
+                    <Select.Root
+                      type="single"
+                      name="manual-event-target"
+                      value={manualTarget}
+                      onValueChange={(value) => {
+                        if (value === "today" || value === "selected") {
+                          manualTarget = value;
+                        }
+                      }}
+                    >
+                      <Select.Trigger id="manual-event-target" class="w-full">
+                        {manualTargetLabel}
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="today" label={`Today (${dateLabel(todayDays, true)})`}>
+                          Today ({dateLabel(todayDays, true)})
+                        </Select.Item>
+                        {#if selectedManualTargetAvailable}
+                          <Select.Item
+                            value="selected"
+                            label={`Selected day (${dateLabel(selectedSummary?.day?.date?.daysSinceEpoch ?? todayDays, true)})`}
+                          >
+                            Selected day ({dateLabel(
+                              selectedSummary?.day?.date?.daysSinceEpoch ??
+                                todayDays,
+                              true,
+                            )})
+                          </Select.Item>
+                        {/if}
+                      </Select.Content>
+                    </Select.Root>
+                  </div>
+
+                  <div class="grid gap-2">
+                    <Label for="manual-event-type">Event</Label>
+                    <Select.Root
+                      type="single"
+                      name="manual-event-type"
+                      value={manualEventType}
+                      onValueChange={(value) => {
+                        if (value === "checkIn" || value === "checkOut") {
+                          manualEventType = value;
+                        }
+                      }}
+                    >
+                      <Select.Trigger id="manual-event-type" class="w-full">
+                        {manualEventTypeLabel}
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item
+                          value="checkIn"
+                          label="Check In"
+                          disabled={!manualEventTypeAllowed("checkIn")}
+                        >
+                          Check In
+                        </Select.Item>
+                        <Select.Item
+                          value="checkOut"
+                          label="Check Out"
+                          disabled={!manualEventTypeAllowed("checkOut")}
+                        >
+                          Check Out
+                        </Select.Item>
+                      </Select.Content>
+                    </Select.Root>
+                  </div>
+
+                  <div class="grid gap-2">
+                    <Label for="manual-event-time">Time</Label>
+                    <Input
+                      id="manual-event-time"
+                      type="time"
+                      step="60"
+                      bind:value={manualTime}
+                      aria-invalid={!parsedManualTime}
+                    />
+                  </div>
+
+                  <div class="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onclick={() => (manualEventOpen = false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={manualSubmitDisabled}>
+                      {manualSubmitting ? "Adding..." : `Add ${manualEventTypeLabel}`}
+                    </Button>
+                  </div>
+                </form>
+              </Popover.Content>
+            </Popover.Root>
           </div>
         </div>
 
@@ -769,25 +1017,27 @@
             <span class="text-muted-foreground text-xs">{todaySessions.length} sessions</span>
           </div>
           <Separator />
-          {#if loading}
-            <div class="text-muted-foreground text-sm">Loading...</div>
-          {:else if todaySessions.length === 0}
-            <div class="text-muted-foreground text-sm">No check-ins yet.</div>
-          {:else}
-            <div class="flex flex-col gap-2">
-              {#each todaySessions as session, index}
-                <div class="grid grid-cols-[24px_1fr_auto] items-center gap-3 text-sm">
-                  <span class="text-muted-foreground tabular-nums">{index + 1}</span>
-                  <span class="font-mono tabular-nums">
-                    {formatTime(session.checkIn)} - {formatTime(session.checkOut)}
-                  </span>
-                  <span class="text-muted-foreground font-mono tabular-nums">
-                    {session.duration === null ? "--:--" : formatSeconds(session.duration)}
-                  </span>
-                </div>
-              {/each}
-            </div>
-          {/if}
+          <ScrollArea.Root class="h-36 pr-3">
+            {#if loading}
+              <div class="text-muted-foreground text-sm">Loading...</div>
+            {:else if todaySessions.length === 0}
+              <div class="text-muted-foreground text-sm">No check-ins yet.</div>
+            {:else}
+              <div class="flex flex-col gap-2">
+                {#each todaySessions as session, index}
+                  <div class="grid grid-cols-[24px_1fr_auto] items-center gap-3 text-sm">
+                    <span class="text-muted-foreground tabular-nums">{index + 1}</span>
+                    <span class="font-mono tabular-nums">
+                      {formatTime(session.checkIn)} - {formatTime(session.checkOut)}
+                    </span>
+                    <span class="text-muted-foreground font-mono tabular-nums">
+                      {session.duration === null ? "--:--" : formatSeconds(session.duration)}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </ScrollArea.Root>
         </div>
       </Card.Content>
     </Card.Root>
@@ -854,12 +1104,12 @@
       {:else}
         <div class="grid grid-cols-[32px_1fr] gap-2">
           <div class="grid grid-rows-7 gap-[3px] text-[10px] text-muted-foreground">
-            <span></span>
             <span>Mon</span>
             <span></span>
             <span>Wed</span>
             <span></span>
             <span>Fri</span>
+            <span></span>
             <span></span>
           </div>
           <div
