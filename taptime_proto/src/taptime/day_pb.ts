@@ -31,6 +31,11 @@ export enum DayFlag {
    * @generated from enum value: DAY_FLAG_REMOTE = 4;
    */
   REMOTE = 4,
+
+  /**
+   * @generated from enum value: DAY_FLAG_VACATION = 8;
+   */
+  VACATION = 8,
 }
 // Retrieve enum metadata with: proto3.getEnumType(DayFlag)
 proto3.util.setEnumType(DayFlag, "com.whs31.taptime.DayFlag", [
@@ -38,6 +43,7 @@ proto3.util.setEnumType(DayFlag, "com.whs31.taptime.DayFlag", [
   { no: 1, name: "DAY_FLAG_WEEKEND" },
   { no: 2, name: "DAY_FLAG_DAY_OFF" },
   { no: 4, name: "DAY_FLAG_REMOTE" },
+  { no: 8, name: "DAY_FLAG_VACATION" },
 ]);
 
 /**

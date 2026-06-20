@@ -60,7 +60,9 @@ impl User {
       date,
       events: vec![],
       flags,
-      required_work_hours: if flags.contains(DayFlags::WEEKEND) {
+      required_work_hours: if flags
+        .intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION)
+      {
         chrono::Duration::zero()
       } else {
         self.settings.required_work_hours

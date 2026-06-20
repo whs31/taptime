@@ -5,6 +5,7 @@ bitflags::bitflags! {
     const WEEKEND = 0b00000001;
     const DAY_OFF = 0b00000010;
     const REMOTE  = 0b00000100;
+    const VACATION = 0b00001000;
   }
 }
 

@@ -1,8 +1,13 @@
 import { createClient } from "@connectrpc/connect";
 import { StoreService as StoreServiceRpc } from "@taptime/proto/taptime/services/store_connect.js";
 import { Date as ProtoDate } from "@taptime/proto/taptime/date_pb.js";
+import type { DayFlag } from "@taptime/proto/taptime/day_pb.js";
 import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
-import { EventRequest } from "@taptime/proto/taptime/services/store_pb.js";
+import {
+  DashboardRequest,
+  EventRequest,
+  SetFlagRequest,
+} from "@taptime/proto/taptime/services/store_pb.js";
 import { transport } from "$lib/grpc";
 import { AuthService } from "./AuthService";
 
@@ -40,6 +45,31 @@ export class StoreService {
 
   static async getDay(date: ProtoDate) {
     return this.client.getDay(date, { headers: AuthService.authHeaders() });
+  }
+
+  static async getDashboard(
+    rangeStart: ProtoDate,
+    rangeEnd: ProtoDate,
+    monthStart: ProtoDate,
+    monthEnd: ProtoDate,
+    today: ProtoDate,
+  ) {
+    return this.client.getDashboard(
+      new DashboardRequest({
+        rangeStart,
+        rangeEnd,
+        monthStart,
+        monthEnd,
+        today,
+      }),
+      { headers: AuthService.authHeaders() },
+    );
+  }
+
+  static async setFlag(date: ProtoDate, flag: DayFlag) {
+    return this.client.setFlag(new SetFlagRequest({ date, flag }), {
+      headers: AuthService.authHeaders(),
+    });
   }
 
   static async addCheckIn(date: ProtoDate, time: LocalTime) {
