@@ -15,7 +15,10 @@ use taptime_schema::{
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use super::db::{CredRow, fetch_core_user, weekday_to_iso};
+use super::{
+  access::{AccessConfig, client_ip, enforce_ip_allowed, enforce_user_allowed, record_user_ip},
+  db::{CredRow, fetch_core_user, weekday_to_iso},
+};
 
 struct ProfileInput {
   name: String,
@@ -26,11 +29,16 @@ struct ProfileInput {
 pub struct AuthServiceImpl {
   db: sqlx::PgPool,
   jwt_secret: String,
+  access_config: AccessConfig,
 }
 
 impl AuthServiceImpl {
-  pub fn new(db: sqlx::PgPool, jwt_secret: String) -> Self {
-    Self { db, jwt_secret }
+  pub fn new(db: sqlx::PgPool, jwt_secret: String, access_config: AccessConfig) -> Self {
+    Self {
+      db,
+      jwt_secret,
+      access_config,
+    }
   }
 
   fn make_jwt(&self, user_id: Uuid) -> Result<String, Status> {
@@ -48,6 +56,21 @@ impl AuthServiceImpl {
   fn authenticated_user_id<T>(&self, request: &Request<T>) -> Result<Uuid, Status> {
     let token = extract_bearer(request)?;
     self.decode_jwt(&token)
+  }
+
+  async fn allowed_ip<T>(&self, request: &Request<T>) -> Result<Option<std::net::IpAddr>, Status> {
+    enforce_ip_allowed(&self.db, client_ip(request, self.access_config)).await
+  }
+
+  async fn authenticated_user<T>(
+    &self,
+    request: &Request<T>,
+  ) -> Result<(Uuid, Option<std::net::IpAddr>), Status> {
+    let user_id = self.authenticated_user_id(request)?;
+    let ip = self.allowed_ip(request).await?;
+    enforce_user_allowed(&self.db, user_id).await?;
+    record_user_ip(&self.db, user_id, ip).await?;
+    Ok((user_id, ip))
   }
 
   async fn verify_user_password(&self, user_id: Uuid, password: &str) -> Result<(), Status> {
@@ -80,7 +103,7 @@ fn extract_bearer<T>(request: &Request<T>) -> Result<String, Status> {
     .ok_or_else(|| Status::unauthenticated("Expected Bearer token"))
 }
 
-fn verify_password(password: &str, password_hash: &str) -> Result<(), Status> {
+pub(super) fn verify_password(password: &str, password_hash: &str) -> Result<(), Status> {
   let parsed_hash =
     PasswordHash::new(password_hash).map_err(|e| Status::internal(e.to_string()))?;
   Argon2::default()
@@ -188,6 +211,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<RegisterUserRequest>,
   ) -> Result<Response<AuthResponse>, Status> {
+    let ip = self.allowed_ip(&request).await?;
     let req = request.into_inner();
     let proto_user = req
       .user
@@ -261,6 +285,7 @@ impl AuthService for AuthServiceImpl {
 
     tracing::info!(user_id = %user_id, email = %profile.email, "user registered");
 
+    record_user_ip(&self.db, user_id, ip).await?;
     let user = self.fetch_user(user_id).await?;
     let jwt = self.make_jwt(user_id)?;
     Ok(Response::new(AuthResponse {
@@ -273,6 +298,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<LoginRequest>,
   ) -> Result<Response<AuthResponse>, Status> {
+    let ip = self.allowed_ip(&request).await?;
     let req = request.into_inner();
     let email = req.email.trim().to_string();
 
@@ -284,6 +310,7 @@ impl AuthService for AuthServiceImpl {
       .ok_or_else(|| Status::not_found("User not found"))?;
 
     verify_password(&req.password, &cred.password_hash)?;
+    enforce_user_allowed(&self.db, cred.user_id).await?;
 
     sqlx::query(include_str!("queries/update_user_last_seen.sql"))
       .bind(cred.user_id)
@@ -293,6 +320,7 @@ impl AuthService for AuthServiceImpl {
 
     tracing::info!(user_id = %cred.user_id, email = %email, "user logged in");
 
+    record_user_ip(&self.db, cred.user_id, ip).await?;
     let user = self.fetch_user(cred.user_id).await?;
     let jwt = self.make_jwt(cred.user_id)?;
     Ok(Response::new(AuthResponse {
@@ -302,7 +330,7 @@ impl AuthService for AuthServiceImpl {
   }
 
   async fn get_user(self: Arc<Self>, request: Request<()>) -> Result<Response<User>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     tracing::debug!(user_id = %user_id, "fetching authenticated user");
     let user = self.fetch_user(user_id).await?;
     Ok(Response::new(User::from(&user)))
@@ -312,7 +340,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<UpdateProfileRequest>,
   ) -> Result<Response<User>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let profile = normalize_profile(req.name, req.email, req.organization)?;
 
@@ -358,7 +386,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<UpdateSettingsRequest>,
   ) -> Result<Response<User>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let (time_zone, settings) = settings_from_update_request(&req)?;
     let weekends = weekdays_to_iso(&settings.weekends);
@@ -384,7 +412,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<UpdateRfidUidRequest>,
   ) -> Result<Response<User>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     let uid = uid_bytes_from_proto(request.into_inner().rfid_uid)?;
 
     sqlx::query(include_str!("queries/update_user_rfid_uid.sql"))
@@ -399,7 +427,7 @@ impl AuthService for AuthServiceImpl {
   }
 
   async fn delete_time_data(self: Arc<Self>, request: Request<()>) -> Result<Response<()>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     let mut tx = self
       .db
       .begin()
@@ -433,7 +461,7 @@ impl AuthService for AuthServiceImpl {
     self: Arc<Self>,
     request: Request<DeleteAccountRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = self.authenticated_user_id(&request)?;
+    let (user_id, _) = self.authenticated_user(&request).await?;
     self
       .verify_user_password(user_id, &request.into_inner().password)
       .await?;
@@ -496,5 +524,12 @@ mod tests {
       .is_err()
     );
     assert_eq!(uid_bytes_from_proto(None).unwrap(), None);
+  }
+
+  #[test]
+  fn password_hash_roundtrips() {
+    let hash = hash_password("correct horse battery staple").unwrap();
+    assert!(verify_password("correct horse battery staple", &hash).is_ok());
+    assert!(verify_password("wrong", &hash).is_err());
   }
 }

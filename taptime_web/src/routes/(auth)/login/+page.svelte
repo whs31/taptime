@@ -13,15 +13,18 @@
   let password = $state("");
   let submitting = $state(false);
   let error = $state<string | undefined>();
+  let banNotice = $state<string | undefined>();
 
   async function login() {
     submitting = true;
     error = undefined;
+    banNotice = undefined;
     try {
       await AuthService.login(email, password);
       await goto("/");
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      banNotice = AuthService.banNotice(e) ?? undefined;
+      error = banNotice ? undefined : e instanceof Error ? e.message : String(e);
     } finally {
       submitting = false;
     }
@@ -34,7 +37,13 @@
     <Card.Description>Enter your credentials to continue</Card.Description>
   </Card.Header>
   <Card.Content class="flex flex-col gap-4">
-    {#if error}
+    {#if banNotice}
+      <Alert.Root variant="destructive">
+        <CircleAlert />
+        <Alert.Title>Access restricted</Alert.Title>
+        <Alert.Description>{banNotice}</Alert.Description>
+      </Alert.Root>
+    {:else if error}
       <Alert.Root variant="destructive">
         <CircleAlert />
         <Alert.Title>Sign in failed</Alert.Title>

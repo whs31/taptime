@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     "schema/taptime/weekday.proto".to_string(),
   ];
   if cfg!(feature = "grpc") {
+    protos.push("schema/taptime/services/admin.proto".to_string());
     protos.push("schema/taptime/services/auth.proto".to_string());
     protos.push("schema/taptime/services/store.proto".to_string());
   }

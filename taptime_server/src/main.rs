@@ -40,9 +40,22 @@ async fn main() -> Result<()> {
   let pool = sqlx::PgPool::connect(&args.database_url).await?;
   sqlx::migrate!("./migrations").run(&pool).await?;
 
-  let auth_service = services::AuthServiceImpl::new(pool.clone(), args.jwt_secret.clone());
-  let store_service = services::StoreServiceImpl::new(pool);
+  let access_config = services::AccessConfig {
+    trust_proxy_headers: args.trust_proxy_headers,
+  };
+  let admin_token_ttl = chrono::Duration::seconds(args.admin_token_ttl_seconds.max(60));
+  let admin_service = services::AdminServiceImpl::new(
+    pool.clone(),
+    args.jwt_secret.clone(),
+    args.admin_password_hash.clone(),
+    admin_token_ttl,
+  );
+  let auth_service =
+    services::AuthServiceImpl::new(pool.clone(), args.jwt_secret.clone(), access_config);
+  let store_service = services::StoreServiceImpl::new(pool, access_config);
 
+  let admin_svc =
+    taptime_schema::services::admin_service_server::AdminServiceServer::new(admin_service);
   let auth_svc =
     taptime_schema::services::auth_service_server::AuthServiceServer::new(auth_service);
   let store_svc =
@@ -67,6 +80,7 @@ async fn main() -> Result<()> {
     .accept_http1(true)
     .layer(cors)
     .layer(tonic_web::GrpcWebLayer::new())
+    .add_service(admin_svc)
     .add_service(auth_svc)
     .add_service(store_svc)
     .serve(args.address)

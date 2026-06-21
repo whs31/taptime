@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+import public "google/protobuf/empty.proto";
+import public "google/protobuf/timestamp.proto";
+import public "taptime/user.proto";
+import public "taptime/uuid.proto";
+
+package com.whs31.taptime.services;
+
+service AdminService {
+  rpc AdminLogin(AdminLoginRequest) returns (AdminLoginResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc GetUserDetail(GetUserDetailRequest) returns (AdminUserDetail);
+  rpc ListBans(ListBansRequest) returns (ListBansResponse);
+  rpc CreateBan(CreateBanRequest) returns (BanRecord);
+  rpc RevokeBan(RevokeBanRequest) returns (BanRecord);
+  rpc DeleteUserTimeData(DeleteUserRequest) returns (google.protobuf.Empty);
+  rpc DeleteUserAccount(DeleteUserRequest) returns (google.protobuf.Empty);
+}
+
+message AdminLoginRequest {
+  string password = 1;
+}
+
+message AdminLoginResponse {
+  string admin_token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message ListUsersRequest {
+  string query = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message AdminUserListItem {
+  User user = 1;
+  bool user_banned = 2;
+  int64 known_ip_count = 3;
+}
+
+message ListUsersResponse {
+  repeated AdminUserListItem users = 1;
+  int64 total = 2;
+}
+
+message GetUserDetailRequest {
+  Uuid user_id = 1;
+}
+
+message AdminUserDetail {
+  User user = 1;
+  repeated KnownIpAddress known_ips = 2;
+  repeated BanRecord bans = 3;
+  int64 event_count = 4;
+  int64 day_flag_count = 5;
+}
+
+message KnownIpAddress {
+  string ip = 1;
+  google.protobuf.Timestamp first_seen = 2;
+  google.protobuf.Timestamp last_seen = 3;
+  int64 request_count = 4;
+}
+
+enum BanKind {
+  BAN_KIND_UNSPECIFIED = 0;
+  BAN_KIND_USER = 1;
+  BAN_KIND_IP = 2;
+}
+
+message BanRecord {
+  Uuid id = 1;
+  BanKind kind = 2;
+  optional Uuid user_id = 3;
+  string ip_cidr = 4;
+  string reason = 5;
+  google.protobuf.Timestamp created_at = 6;
+  optional google.protobuf.Timestamp expires_at = 7;
+  optional google.protobuf.Timestamp revoked_at = 8;
+  bool active = 9;
+}
+
+message ListBansRequest {
+  BanKind kind = 1;
+  bool include_inactive = 2;
+}
+
+message ListBansResponse {
+  repeated BanRecord bans = 1;
+}
+
+message CreateBanRequest {
+  BanKind kind = 1;
+  optional Uuid user_id = 2;
+  string ip_cidr = 3;
+  string reason = 4;
+  optional google.protobuf.Timestamp expires_at = 5;
+}
+
+message RevokeBanRequest {
+  Uuid ban_id = 1;
+  BanKind kind = 2;
+}
+
+message DeleteUserRequest {
+  Uuid user_id = 1;
+}

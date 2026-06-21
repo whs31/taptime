@@ -13,16 +13,28 @@ use taptime_schema::{
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use super::db::fetch_core_user;
+use super::{
+  access::{AccessConfig, client_ip, enforce_ip_allowed, enforce_user_allowed, record_user_ip},
+  db::fetch_core_user,
+};
 use crate::interceptors::AuthenticatedUser;
 
 pub struct StoreServiceImpl {
   db: sqlx::PgPool,
+  access_config: AccessConfig,
 }
 
 impl StoreServiceImpl {
-  pub fn new(db: sqlx::PgPool) -> Self {
-    Self { db }
+  pub fn new(db: sqlx::PgPool, access_config: AccessConfig) -> Self {
+    Self { db, access_config }
+  }
+
+  async fn authenticated_user<T>(&self, request: &Request<T>) -> Result<Uuid, Status> {
+    let user_id = extract_user(request)?;
+    let ip = enforce_ip_allowed(&self.db, client_ip(request, self.access_config)).await?;
+    enforce_user_allowed(&self.db, user_id).await?;
+    record_user_ip(&self.db, user_id, ip).await?;
+    Ok(user_id)
   }
 }
 
@@ -447,7 +459,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<Date>,
   ) -> Result<Response<taptime_schema::Day>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let date: chrono::NaiveDate = request.into_inner().into();
     let day = self
       .build_days(user_id, date, date)
@@ -462,7 +474,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<Date>,
   ) -> Result<Response<prost_types::Duration>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let date: chrono::NaiveDate = request.into_inner().into();
     let day = self.build_day(user_id, date).await?;
     let duration = day
@@ -476,7 +488,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<Date>,
   ) -> Result<Response<taptime_schema::Balance>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let date: chrono::NaiveDate = request.into_inner().into();
     let day = self.build_day(user_id, date).await?;
     let balance = day.balance().map_err(|e| Status::internal(e.to_string()))?;
@@ -487,7 +499,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<DashboardRequest>,
   ) -> Result<Response<DashboardResponse>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let range_start = date_from_request(req.range_start, "range_start")?;
     let range_end = date_from_request(req.range_end, "range_end")?;
@@ -511,7 +523,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<SetFlagRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let date: chrono::NaiveDate = req
       .date
@@ -538,7 +550,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<SetRequiredWorkHoursOverrideRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let date: chrono::NaiveDate = req
       .date
@@ -575,7 +587,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<EventRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let date: chrono::NaiveDate = req
       .date
@@ -611,7 +623,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<EventRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let date: chrono::NaiveDate = req
       .date
@@ -647,7 +659,7 @@ impl StoreService for StoreServiceImpl {
     self: Arc<Self>,
     request: Request<DeleteEventRequest>,
   ) -> Result<Response<()>, Status> {
-    let user_id = extract_user(&request)?;
+    let user_id = self.authenticated_user(&request).await?;
     let req = request.into_inner();
     let event_id: Uuid = req
       .event_id

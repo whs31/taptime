@@ -95,7 +95,7 @@
       );
       await goto("/");
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = AuthService.banNotice(e) ?? (e instanceof Error ? e.message : String(e));
     } finally {
       submitting = false;
     }

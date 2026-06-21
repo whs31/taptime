@@ -14,7 +14,15 @@ Set these values before starting the stack:
 
 - `POSTGRES_PASSWORD`: use a long random password.
 - `JWT_SECRET`: use a long random secret; changing it logs users out.
+- `ADMIN_PASSWORD_HASH`: optional Argon2 hash for the admin CLI. Leave empty to disable admin login.
+- `TRUST_PROXY_HEADERS`: set to `true` when the API is reachable only through your trusted reverse proxy.
 - `PUBLIC_API_URL`: the API URL that the user's browser can reach.
+
+Generate an admin password hash locally:
+
+```sh
+cargo run --manifest-path taptime_admin_cli/Cargo.toml -- hash-password
+```
 
 The default bind addresses expose both services only on host loopback:
 
@@ -70,4 +78,10 @@ Upgrade after pulling new code:
 
 ```sh
 docker compose --env-file .env.production up -d --build
+```
+
+Run the admin TUI:
+
+```sh
+docker compose --env-file .env.production --profile admin run --rm admin_cli
 ```

@@ -1,4 +1,4 @@
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { AuthService as AuthServiceClient } from "@taptime/proto/taptime/services/auth_connect.js";
 import type { User } from "@taptime/proto/taptime/user_pb.js";
 import {
@@ -41,6 +41,14 @@ export class AuthService {
 
   static logout(): void {
     this.clearStoredJwt();
+  }
+
+  static banNotice(error: unknown): string | null {
+    if (!(error instanceof ConnectError) || error.code !== Code.PermissionDenied) {
+      return null;
+    }
+    const message = error.message.replace(/^\[[^\]]+\]\s*/, "").trim();
+    return message.toLowerCase().includes("banned") ? message : null;
   }
 
   static async registerUser(user: User, password: string): Promise<User> {

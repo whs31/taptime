@@ -29,6 +29,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_TOKEN_TTL_SECONDS: ${ADMIN_TOKEN_TTL_SECONDS:-28800}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-50051}:50051"
 
@@ -47,6 +50,20 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL}
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+
+  admin_cli:
+    profiles: ["admin"]
+    build:
+      context: .
+      dockerfile: taptime_admin_cli/Dockerfile
+    init: true
+    depends_on:
+      server:
+        condition: service_started
+    environment:
+      ADMIN_API_URL: http://server:50051
+    stdin_open: true
+    tty: true
 
 volumes:
   postgres_data:

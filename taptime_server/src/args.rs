@@ -18,6 +18,15 @@ pub struct Args {
 
   #[arg(long, env = "JWT_SECRET")]
   pub jwt_secret: String,
+
+  #[arg(long, env = "ADMIN_PASSWORD_HASH")]
+  pub admin_password_hash: Option<String>,
+
+  #[arg(long, env = "ADMIN_TOKEN_TTL_SECONDS", default_value_t = 28_800)]
+  pub admin_token_ttl_seconds: i64,
+
+  #[arg(long, env = "TRUST_PROXY_HEADERS", default_value_t = false)]
+  pub trust_proxy_headers: bool,
 }
 
 #[must_use]

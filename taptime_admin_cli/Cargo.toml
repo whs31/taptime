@@ -1,0 +1,18 @@
+[package]
+name = "taptime_admin_cli"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+taptime_schema = { path = "../taptime_schema", features = ["client"] }
+
+argon2 = "0.5"
+chrono = "0.4"
+clap = { version = "4", features = ["derive", "color", "env"] }
+crossterm = "0.28"
+prost-types = { version = "0.14", features = ["chrono"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+ratatui = "0.29"
+tokio = { version = "1", features = ["full"] }
+tonic = "0.14"
+uuid = "1"
