@@ -678,13 +678,14 @@
     </div>
   {/if}
 
-  <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-    <Card.Root class="self-start">
-      <Card.Header class="pb-3">
-        <Card.Title>Today</Card.Title>
-        <Card.Description>{dateLabel(todayDays)}</Card.Description>
-      </Card.Header>
-      <Card.Content class="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
+  <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div class="flex h-full min-w-0 flex-col gap-4">
+      <Card.Root size="sm">
+        <Card.Header class="pb-3">
+          <Card.Title>Today</Card.Title>
+          <Card.Description>{dateLabel(todayDays)}</Card.Description>
+        </Card.Header>
+        <Card.Content class="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
         <div class="flex flex-col gap-4">
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="flex flex-col gap-1">
@@ -922,10 +923,76 @@
             {/if}
           </ScrollArea.Root>
         </div>
-      </Card.Content>
-    </Card.Root>
+        </Card.Content>
+      </Card.Root>
 
-    <Card.Root class="self-start">
+      <Card.Root size="sm" class="flex-1">
+        <Card.Header class="items-center pb-3 text-center">
+          <Card.Title>Activity</Card.Title>
+          <Card.Description>Rolling year ending today</Card.Description>
+        </Card.Header>
+        <Card.Content class="flex flex-1 items-center overflow-x-auto pb-3">
+          {#if loading}
+            <div class="text-muted-foreground text-sm">Loading...</div>
+          {:else}
+            <div class="mx-auto grid w-max grid-cols-[32px_max-content] gap-2">
+            <div class="grid grid-rows-7 gap-[3px] text-[10px] text-muted-foreground">
+              <span>Mon</span>
+              <span></span>
+              <span>Wed</span>
+              <span></span>
+              <span>Fri</span>
+              <span></span>
+              <span></span>
+            </div>
+            <div
+              class="grid grid-flow-col grid-rows-7 auto-cols-[13px] gap-[3px]"
+              aria-label="Rolling year activity calendar"
+            >
+              {#each calendarCells as summary}
+                {#if summary?.day}
+                  <Tooltip.Root>
+                    <Tooltip.Trigger>
+                      {#snippet child({ props })}
+                        <button
+                          {...props}
+                          type="button"
+                          class="relative size-[13px] rounded-[3px] border border-border/40 outline-none transition-colors hover:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card {selectedDayKey ===
+                          summary.day?.date?.daysSinceEpoch
+                            ? 'shadow-[inset_0_0_0_2px_var(--ring)]'
+                            : ''}"
+                          style={calendarCellStyle(summary)}
+                          onclick={() =>
+                            selectActivityDay(summary.day?.date?.daysSinceEpoch)}
+                        >
+                          <span class="sr-only">
+                            {dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)}
+                          </span>
+                          {#each calendarDots(summary) as color}
+                            <span
+                              class="absolute bottom-[1px] right-[1px] size-[4px] rounded-full border border-background"
+                              style={`background-color: ${color};`}
+                            ></span>
+                          {/each}
+                        </button>
+                      {/snippet}
+                    </Tooltip.Trigger>
+                    <Tooltip.Content sideOffset={6}>
+                      {activityTooltip(summary)}
+                    </Tooltip.Content>
+                  </Tooltip.Root>
+                {:else}
+                  <span class="size-[13px]"></span>
+                {/if}
+              {/each}
+            </div>
+            </div>
+          {/if}
+        </Card.Content>
+      </Card.Root>
+    </div>
+
+    <Card.Root size="sm" class="h-full">
       <Card.Header class="pb-3">
         <Card.Title>Selected Day</Card.Title>
         <Card.Description>
@@ -1025,7 +1092,7 @@
               </div>
             </div>
           </div>
-          <ScrollArea.Root class="h-32 pr-3">
+          <ScrollArea.Root class="h-40 pr-3">
             {#if selectedEventItems.length === 0}
               <div class="text-muted-foreground text-sm">No events.</div>
             {:else}
@@ -1060,73 +1127,8 @@
     </Card.Root>
   </div>
 
-  <Card.Root>
-    <Card.Header class="items-center pb-3 text-center">
-      <Card.Title>Activity</Card.Title>
-      <Card.Description>Rolling year ending today</Card.Description>
-    </Card.Header>
-    <Card.Content class="overflow-x-auto pb-4">
-      {#if loading}
-        <div class="text-muted-foreground text-sm">Loading...</div>
-      {:else}
-        <div class="mx-auto grid w-max grid-cols-[32px_max-content] gap-2">
-          <div class="grid grid-rows-7 gap-[3px] text-[10px] text-muted-foreground">
-            <span>Mon</span>
-            <span></span>
-            <span>Wed</span>
-            <span></span>
-            <span>Fri</span>
-            <span></span>
-            <span></span>
-          </div>
-          <div
-            class="grid grid-flow-col grid-rows-7 auto-cols-[13px] gap-[3px]"
-            aria-label="Rolling year activity calendar"
-          >
-            {#each calendarCells as summary}
-              {#if summary?.day}
-                <Tooltip.Root>
-                  <Tooltip.Trigger>
-                    {#snippet child({ props })}
-                      <button
-                        {...props}
-                        type="button"
-                        class="relative size-[13px] rounded-[3px] border border-border/40 outline-none transition-colors hover:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card {selectedDayKey ===
-                        summary.day?.date?.daysSinceEpoch
-                          ? 'shadow-[inset_0_0_0_2px_var(--ring)]'
-                          : ''}"
-                        style={calendarCellStyle(summary)}
-                        onclick={() =>
-                          selectActivityDay(summary.day?.date?.daysSinceEpoch)}
-                      >
-                        <span class="sr-only">
-                          {dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)}
-                        </span>
-                        {#each calendarDots(summary) as color}
-                          <span
-                            class="absolute bottom-[1px] right-[1px] size-[4px] rounded-full border border-background"
-                            style={`background-color: ${color};`}
-                          ></span>
-                        {/each}
-                      </button>
-                    {/snippet}
-                  </Tooltip.Trigger>
-                  <Tooltip.Content sideOffset={6}>
-                    {activityTooltip(summary)}
-                  </Tooltip.Content>
-                </Tooltip.Root>
-              {:else}
-                <span class="size-[13px]"></span>
-              {/if}
-            {/each}
-          </div>
-        </div>
-      {/if}
-    </Card.Content>
-  </Card.Root>
-
-  <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1fr)]">
-    <Card.Root class="self-start">
+  <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1fr)]">
+    <Card.Root size="sm" class="h-full">
       <Card.Header class="pb-3">
         <Card.Title>{monthLabel(todayDays)}</Card.Title>
         <Card.Description>Month-to-date stats</Card.Description>
@@ -1145,7 +1147,7 @@
       </Card.Content>
     </Card.Root>
 
-    <Card.Root class="self-start">
+    <Card.Root size="sm" class="h-full">
       <Card.Header class="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="space-y-1">
           <Card.Title>Month Rhythm</Card.Title>
