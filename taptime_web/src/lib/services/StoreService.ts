@@ -6,10 +6,12 @@ import type { DayFlag } from "@taptime/proto/taptime/day_pb.js";
 import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
 import {
   DashboardRequest,
+  DeleteEventRequest,
   EventRequest,
   SetFlagRequest,
   SetRequiredWorkHoursOverrideRequest,
 } from "@taptime/proto/taptime/services/store_pb.js";
+import type { Uuid } from "@taptime/proto/taptime/uuid_pb.js";
 import { transport } from "$lib/grpc";
 import { AuthService } from "./AuthService";
 
@@ -113,6 +115,12 @@ export class StoreService {
 
   static async addCheckOut(date: ProtoDate, time: LocalTime) {
     return this.client.addCheckOut(new EventRequest({ date, time }), {
+      headers: AuthService.authHeaders(),
+    });
+  }
+
+  static async deleteEvent(eventId: Uuid) {
+    return this.client.deleteEvent(new DeleteEventRequest({ eventId }), {
       headers: AuthService.authHeaders(),
     });
   }

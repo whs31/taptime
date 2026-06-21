@@ -1,4 +1,5 @@
-SELECT event_kind,
+SELECT id,
+       event_kind,
        hour,
        minute,
        second

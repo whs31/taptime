@@ -48,8 +48,12 @@ export function timestampLabel(value?: TimestampLike) {
   if (!value) return "Never";
   const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
   return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(ms));
 }
 

@@ -5,6 +5,7 @@ import { DayFlag, type Day } from "@taptime/proto/taptime/day_pb.js";
 import type { Event } from "@taptime/proto/taptime/event_pb.js";
 import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
 import type { DaySummary } from "@taptime/proto/taptime/services/store_pb.js";
+import type { Uuid } from "@taptime/proto/taptime/uuid_pb.js";
 
 export const MS_PER_DAY = 86_400_000;
 export const SECONDS_PER_DAY = 86_400;
@@ -15,6 +16,15 @@ export type Session = {
   checkIn: number | null;
   checkOut: number | null;
   duration: number | null;
+};
+
+export type EventListItem = {
+  index: number;
+  id?: Uuid;
+  key: string;
+  kind: ManualEventType;
+  label: string;
+  time: number;
 };
 
 export type ChartPoint = {
@@ -245,6 +255,38 @@ export function formatHours(secs: number) {
 export function formatTime(seconds: number | null) {
   if (seconds === null) return "--:--";
   return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor((seconds % 3600) / 60))}`;
+}
+
+export function eventKindLabel(event: Event) {
+  return event.eventType.case === "checkOut" ? "Check Out" : "Check In";
+}
+
+export function eventKey(event: Event, index: number) {
+  return event.id
+    ? `${event.id.mostSignificantBits}:${event.id.leastSignificantBits}`
+    : `event-${index}`;
+}
+
+export function buildEventListItems(d: Day | null | undefined): EventListItem[] {
+  return (d?.events ?? []).flatMap((event, index) => {
+    const seconds = eventSeconds(event);
+    if (
+      seconds === null ||
+      (event.eventType.case !== "checkIn" && event.eventType.case !== "checkOut")
+    ) {
+      return [];
+    }
+    return [
+      {
+        index,
+        id: event.id,
+        key: eventKey(event, index),
+        kind: event.eventType.case,
+        label: eventKindLabel(event),
+        time: seconds,
+      },
+    ];
+  });
 }
 
 export function computeWorkSeconds(d: Day | null | undefined, currentSeconds?: number) {

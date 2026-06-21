@@ -85,14 +85,8 @@ export class LocalTime {
     return `${this.pad(this.hour)}:${this.pad(this.minute)}`;
   }
 
-  /**
-   * Convert to a string in 12-hour format with AM/PM
-   */
-  to12HourString(): string {
-    const hour12 =
-      this.hour === 0 ? 12 : this.hour > 12 ? this.hour - 12 : this.hour;
-    const amPm = this.hour >= 12 ? "PM" : "AM";
-    return `${this.pad(hour12)}:${this.pad(this.minute)}:${this.pad(this.second)} ${amPm}`;
+  to24HourString(): string {
+    return this.toString();
   }
 
   /**

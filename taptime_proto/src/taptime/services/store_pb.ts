@@ -9,6 +9,7 @@ import { Date } from "../date_pb.js";
 import { Day, DayFlag } from "../day_pb.js";
 import { Balance } from "../balance_pb.js";
 import { LocalTime } from "../local_time_pb.js";
+import { Uuid } from "../uuid_pb.js";
 
 /**
  * @generated from message com.whs31.taptime.services.DashboardRequest
@@ -404,6 +405,43 @@ export class EventRequest extends Message<EventRequest> {
 
   static equals(a: EventRequest | PlainMessage<EventRequest> | undefined, b: EventRequest | PlainMessage<EventRequest> | undefined): boolean {
     return proto3.util.equals(EventRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message com.whs31.taptime.services.DeleteEventRequest
+ */
+export class DeleteEventRequest extends Message<DeleteEventRequest> {
+  /**
+   * @generated from field: com.whs31.taptime.Uuid event_id = 1;
+   */
+  eventId?: Uuid;
+
+  constructor(data?: PartialMessage<DeleteEventRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "com.whs31.taptime.services.DeleteEventRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "event_id", kind: "message", T: Uuid },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteEventRequest {
+    return new DeleteEventRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteEventRequest {
+    return new DeleteEventRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteEventRequest {
+    return new DeleteEventRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteEventRequest | PlainMessage<DeleteEventRequest> | undefined, b: DeleteEventRequest | PlainMessage<DeleteEventRequest> | undefined): boolean {
+    return proto3.util.equals(DeleteEventRequest, a, b);
   }
 }
 

@@ -5,8 +5,9 @@ use taptime_core::{Balance, Day, DayFlags, Event, LocalTime, User};
 use taptime_schema::{
   Date,
   services::{
-    DashboardRequest, DashboardResponse, DaySummary, EventRequest, MonthlyStats, SetFlagRequest,
-    SetRequiredWorkHoursOverrideRequest, store_service_server::StoreService,
+    DashboardRequest, DashboardResponse, DaySummary, DeleteEventRequest, EventRequest,
+    MonthlyStats, SetFlagRequest, SetRequiredWorkHoursOverrideRequest,
+    store_service_server::StoreService,
   },
 };
 use tonic::{Request, Response, Status};
@@ -28,6 +29,7 @@ impl StoreServiceImpl {
 #[derive(sqlx::FromRow)]
 struct EventRangeRow {
   date_days: i32,
+  id: Uuid,
   event_kind: i16,
   hour: i16,
   minute: i16,
@@ -49,8 +51,15 @@ struct DayRequiredWorkOverrideRangeRow {
 #[derive(Debug, Clone)]
 struct BuiltDay {
   day: Day,
+  event_ids: Vec<Uuid>,
   work_target: Duration,
   required_work_hours_overridden: bool,
+}
+
+#[derive(Debug, Clone)]
+struct StoredEvent {
+  id: Uuid,
+  event: Event,
 }
 
 fn extract_user<T>(request: &Request<T>) -> Result<Uuid, Status> {
@@ -122,13 +131,20 @@ fn apply_day_configuration(
   work_target
 }
 
-fn row_to_event(event_kind: i16, hour: i16, minute: i16, second: i16) -> Result<Event, Status> {
+fn row_to_event(
+  id: Uuid,
+  event_kind: i16,
+  hour: i16,
+  minute: i16,
+  second: i16,
+) -> Result<StoredEvent, Status> {
   let lt = LocalTime::new(hour as u32, minute as u32, second as u32)
     .map_err(|e| Status::internal(e.to_string()))?;
-  Ok(match event_kind {
+  let event = match event_kind {
     0 => Event::CheckIn(lt),
     _ => Event::CheckOut(lt),
-  })
+  };
+  Ok(StoredEvent { id, event })
 }
 
 fn is_non_required_day(day: &Day) -> bool {
@@ -167,7 +183,7 @@ fn summarize_day(built_day: &BuiltDay, today: NaiveDate) -> DaySummary {
   let clocked_work = day.clocked_work_duration();
   let balance = dashboard_balance(day);
   DaySummary {
-    day: Some(taptime_schema::Day::from(day)),
+    day: Some(schema_day_from_built_day(built_day)),
     clocked_work: Some(clocked_work.into()),
     balance: Some(taptime_schema::Balance::from(&balance)),
     skipped: is_skipped_day(day, today, clocked_work),
@@ -177,13 +193,21 @@ fn summarize_day(built_day: &BuiltDay, today: NaiveDate) -> DaySummary {
   }
 }
 
+fn schema_day_from_built_day(built_day: &BuiltDay) -> taptime_schema::Day {
+  let mut day = taptime_schema::Day::from(&built_day.day);
+  for (event, id) in day.events.iter_mut().zip(&built_day.event_ids) {
+    event.id = Some(taptime_schema::Uuid::from(id));
+  }
+  day
+}
+
 fn build_days_from_maps(
   user: &User,
   start: NaiveDate,
   end: NaiveDate,
   flags_by_day: &BTreeMap<i32, DayFlags>,
   overrides_by_day: &BTreeMap<i32, Duration>,
-  mut events_by_day: BTreeMap<i32, Vec<Event>>,
+  mut events_by_day: BTreeMap<i32, Vec<StoredEvent>>,
 ) -> Result<Vec<BuiltDay>, Status> {
   let mut days = Vec::new();
   let mut date = start;
@@ -196,9 +220,12 @@ fn build_days_from_maps(
       .unwrap_or(day.flags);
     let override_duration = overrides_by_day.get(&days_since_epoch).copied();
     let work_target = apply_day_configuration(&mut day, flags, user, override_duration);
-    day.events = events_by_day.remove(&days_since_epoch).unwrap_or_default();
+    let stored_events = events_by_day.remove(&days_since_epoch).unwrap_or_default();
+    let event_ids = stored_events.iter().map(|event| event.id).collect();
+    day.events = stored_events.into_iter().map(|event| event.event).collect();
     days.push(BuiltDay {
       day,
+      event_ids,
       work_target,
       required_work_hours_overridden: override_duration.is_some(),
     });
@@ -349,12 +376,13 @@ impl StoreServiceImpl {
         .fetch_all(&self.db)
         .await
         .map_err(|e| Status::internal(e.to_string()))?;
-    let mut events_by_day: BTreeMap<i32, Vec<Event>> = BTreeMap::new();
+    let mut events_by_day: BTreeMap<i32, Vec<StoredEvent>> = BTreeMap::new();
     for row in event_rows {
       events_by_day
         .entry(row.date_days)
         .or_default()
         .push(row_to_event(
+          row.id,
           row.event_kind,
           row.hour,
           row.minute,
@@ -410,8 +438,13 @@ impl StoreService for StoreServiceImpl {
   ) -> Result<Response<taptime_schema::Day>, Status> {
     let user_id = extract_user(&request)?;
     let date: chrono::NaiveDate = request.into_inner().into();
-    let day = self.build_day(user_id, date).await?;
-    Ok(Response::new(taptime_schema::Day::from(&day)))
+    let day = self
+      .build_days(user_id, date, date)
+      .await?
+      .into_iter()
+      .next()
+      .ok_or_else(|| Status::internal("Failed to build day"))?;
+    Ok(Response::new(schema_day_from_built_day(&day)))
   }
 
   async fn get_work_hours(
@@ -598,6 +631,31 @@ impl StoreService for StoreServiceImpl {
 
     Ok(Response::new(()))
   }
+
+  async fn delete_event(
+    self: Arc<Self>,
+    request: Request<DeleteEventRequest>,
+  ) -> Result<Response<()>, Status> {
+    let user_id = extract_user(&request)?;
+    let req = request.into_inner();
+    let event_id: Uuid = req
+      .event_id
+      .ok_or_else(|| Status::invalid_argument("Missing event_id"))?
+      .into();
+
+    let result = sqlx::query(include_str!("queries/delete_event.sql"))
+      .bind(event_id)
+      .bind(user_id)
+      .execute(&self.db)
+      .await
+      .map_err(|e| Status::internal(e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+      return Err(Status::not_found("Event not found"));
+    }
+
+    Ok(Response::new(()))
+  }
 }
 
 #[cfg(test)]
@@ -643,6 +701,7 @@ mod tests {
   fn built_day(day: Day, user: &User) -> BuiltDay {
     BuiltDay {
       day,
+      event_ids: vec![],
       work_target: user.settings.required_work_hours,
       required_work_hours_overridden: false,
     }
@@ -659,9 +718,20 @@ mod tests {
       DayFlags::VACATION | DayFlags::REMOTE,
     );
     let mut events_by_day = BTreeMap::new();
+    let check_in_id = Uuid::new_v4();
+    let check_out_id = Uuid::new_v4();
     events_by_day.insert(
       date_to_epoch_days(date(2024, 1, 3)),
-      vec![Event::CheckIn(lt(9, 0)), Event::CheckOut(lt(12, 0))],
+      vec![
+        StoredEvent {
+          id: check_in_id,
+          event: Event::CheckIn(lt(9, 0)),
+        },
+        StoredEvent {
+          id: check_out_id,
+          event: Event::CheckOut(lt(12, 0)),
+        },
+      ],
     );
 
     let days = build_days_from_maps(
@@ -681,6 +751,17 @@ mod tests {
     assert!(days[1].day.is_remote());
     assert_eq!(days[1].day.required_work_hours, Duration::zero());
     assert_eq!(days[2].day.clocked_work_duration(), Duration::hours(3));
+    assert_eq!(days[2].event_ids, vec![check_in_id, check_out_id]);
+
+    let schema_day = schema_day_from_built_day(&days[2]);
+    assert_eq!(
+      schema_day.events[0].id,
+      Some(taptime_schema::Uuid::from(check_in_id))
+    );
+    assert_eq!(
+      schema_day.events[1].id,
+      Some(taptime_schema::Uuid::from(check_out_id))
+    );
   }
 
   #[test]

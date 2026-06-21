@@ -13,6 +13,7 @@
   import {
     addDays,
     balanceLabel,
+    buildEventListItems,
     buildSessions,
     buildSummaryMap,
     currentTimeValue,
@@ -38,6 +39,7 @@
     summaryClockedSeconds,
     todayDate,
     workTargetSeconds,
+    type EventListItem,
     type ManualEventType,
   } from "$lib/dashboard";
   import { StoreService } from "$lib/services";
@@ -46,6 +48,7 @@
   import CalendarPlusIcon from "@lucide/svelte/icons/calendar-plus";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
+  import Trash2Icon from "@lucide/svelte/icons/trash-2";
   import { DayFlag } from "@taptime/proto/taptime/day_pb.js";
   import type { DashboardResponse, DaySummary } from "@taptime/proto/taptime/services/store_pb.js";
 
@@ -83,6 +86,7 @@
   let loadedKey = $state("");
   let flagUpdating = $state(false);
   let overrideSaving = $state(false);
+  let deletingEventKey = $state<string | null>(null);
   let manualOpen = $state(false);
   let manualSubmitting = $state(false);
   let manualEventType = $state<ManualEventType>("checkIn");
@@ -101,11 +105,13 @@
   const rows = $derived([...summaries].sort((a, b) => (dayKey(b.day) ?? 0) - (dayKey(a.day) ?? 0)));
   const filteredRows = $derived(rows.filter((summary) => matchesFilters(summary)));
   const selectedSessions = $derived(buildSessions(selectedSummary?.day));
+  const selectedEventItems = $derived(buildEventListItems(selectedSummary?.day));
   const validManualEventType = $derived(nextManualEventType(selectedSummary?.day?.events ?? []));
   const parsedManualTime = $derived(parseManualTime(manualTime));
   const manualEventTypeLabel = $derived(manualEventType === "checkIn" ? "Check In" : "Check Out");
   const manualSubmitDisabled = $derived(
     manualSubmitting ||
+      deletingEventKey !== null ||
       loading ||
       refreshing ||
       !selectedSummary?.day?.date ||
@@ -124,6 +130,7 @@
     overrideSaving ||
       flagUpdating ||
       manualSubmitting ||
+      deletingEventKey !== null ||
       !selectedSummary?.day?.date ||
       overrideSeconds <= 0 ||
       !overrideDirty,
@@ -132,6 +139,7 @@
     overrideSaving ||
       flagUpdating ||
       manualSubmitting ||
+      deletingEventKey !== null ||
       !selectedSummary?.day?.date ||
       !selectedSummary.requiredWorkHoursOverridden,
   );
@@ -276,6 +284,19 @@
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
       manualSubmitting = false;
+    }
+  }
+
+  async function deleteEvent(item: EventListItem) {
+    if (!item.id || deletingEventKey !== null) return;
+    deletingEventKey = item.key;
+    try {
+      await StoreService.deleteEvent(item.id);
+      await loadHistory(true);
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      deletingEventKey = null;
     }
   }
 
@@ -572,7 +593,7 @@
                 <span class="text-sm">{control.label}</span>
                 <Switch.Root
                   checked={selectedHasFlag(control.flag)}
-                  disabled={flagUpdating || manualSubmitting}
+                  disabled={flagUpdating || manualSubmitting || deletingEventKey !== null}
                   onclick={() => toggleSelectedFlag(control.flag)}
                 />
               </div>
@@ -583,8 +604,10 @@
 
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="text-sm font-medium">Sessions</div>
-              <div class="text-muted-foreground text-xs">{selectedSessions.length} sessions</div>
+              <div class="text-sm font-medium">Events</div>
+              <div class="text-muted-foreground text-xs">
+                {selectedEventItems.length} taps, {selectedSessions.length} sessions
+              </div>
             </div>
             <Popover.Root bind:open={manualOpen}>
               <Popover.Trigger>
@@ -594,7 +617,7 @@
                     variant="secondary"
                     size="sm"
                     onclick={openManualEvent}
-                    disabled={manualSubmitting || flagUpdating}
+                    disabled={manualSubmitting || flagUpdating || deletingEventKey !== null}
                   >
                     <PlusIcon />
                     Add Event
@@ -651,19 +674,30 @@
           </div>
 
           <ScrollArea.Root class="h-56 pr-3">
-            {#if selectedSessions.length === 0}
-              <div class="text-muted-foreground text-sm">No sessions.</div>
+            {#if selectedEventItems.length === 0}
+              <div class="text-muted-foreground text-sm">No events.</div>
             {:else}
               <div class="flex flex-col gap-2">
-                {#each selectedSessions as session, index}
-                  <div class="grid grid-cols-[24px_1fr_auto] items-center gap-3 text-sm">
-                    <span class="text-muted-foreground tabular-nums">{index + 1}</span>
-                    <span class="font-mono tabular-nums">
-                      {formatTime(session.checkIn)} - {formatTime(session.checkOut)}
-                    </span>
-                    <span class="text-muted-foreground font-mono tabular-nums">
-                      {session.duration === null ? "--:--" : formatSeconds(session.duration)}
-                    </span>
+                {#each selectedEventItems as item (item.key)}
+                  <div class="grid grid-cols-[24px_1fr_auto_auto] items-center gap-3 text-sm">
+                    <span class="text-muted-foreground tabular-nums">{item.index + 1}</span>
+                    <span>{item.label}</span>
+                    <span class="font-mono tabular-nums">{formatTime(item.time)}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      title={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      disabled={
+                        !item.id ||
+                        deletingEventKey !== null ||
+                        manualSubmitting ||
+                        flagUpdating
+                      }
+                      onclick={() => deleteEvent(item)}
+                    >
+                      <Trash2Icon />
+                    </Button>
                   </div>
                 {/each}
               </div>

@@ -58,11 +58,13 @@ impl From<&Event> for taptime_schema::Event {
   fn from(value: &Event) -> Self {
     match value {
       Event::CheckIn(time) => Self {
+        id: None,
         event_type: Some(taptime_schema::event::EventType::CheckIn(
           time.clone().into(),
         )),
       },
       Event::CheckOut(time) => Self {
+        id: None,
         event_type: Some(taptime_schema::event::EventType::CheckOut(
           time.clone().into(),
         )),

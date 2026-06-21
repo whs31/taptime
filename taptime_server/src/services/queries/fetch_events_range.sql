@@ -1,4 +1,5 @@
 SELECT date_days,
+       id,
        event_kind,
        hour,
        minute,

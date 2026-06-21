@@ -19,6 +19,7 @@ service StoreService {
   rpc SetRequiredWorkHoursOverride(SetRequiredWorkHoursOverrideRequest) returns (google.protobuf.Empty);
   rpc AddCheckIn(EventRequest) returns (google.protobuf.Empty);
   rpc AddCheckOut(EventRequest) returns (google.protobuf.Empty);
+  rpc DeleteEvent(DeleteEventRequest) returns (google.protobuf.Empty);
 }
 
 message DashboardRequest {
@@ -70,4 +71,8 @@ message SetRequiredWorkHoursOverrideRequest {
 message EventRequest {
   Date date = 1;
   LocalTime time = 2;
+}
+
+message DeleteEventRequest {
+  Uuid event_id = 1;
 }

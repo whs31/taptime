@@ -5,12 +5,18 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3 } from "@bufbuild/protobuf";
+import { Uuid } from "./uuid_pb.js";
 import { LocalTime } from "./local_time_pb.js";
 
 /**
  * @generated from message com.whs31.taptime.Event
  */
 export class Event extends Message<Event> {
+  /**
+   * @generated from field: com.whs31.taptime.Uuid id = 3;
+   */
+  id?: Uuid;
+
   /**
    * @generated from oneof com.whs31.taptime.Event.event_type
    */
@@ -36,6 +42,7 @@ export class Event extends Message<Event> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "com.whs31.taptime.Event";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 3, name: "id", kind: "message", T: Uuid },
     { no: 1, name: "check_in", kind: "message", T: LocalTime, oneof: "event_type" },
     { no: 2, name: "check_out", kind: "message", T: LocalTime, oneof: "event_type" },
   ]);

@@ -15,6 +15,7 @@
   import {
     balanceContribution,
     balanceLabel as sharedBalanceLabel,
+    buildEventListItems,
     buildMonthRhythmModel,
     buildSessions,
     buildSummaryMap,
@@ -46,6 +47,7 @@
     requiredDaySeconds,
     summaryClockedSeconds as sharedSummaryClockedSeconds,
     workTargetSeconds,
+    type EventListItem,
     type ManualEventType,
   } from "$lib/dashboard";
   import { userStore } from "$lib/stores";
@@ -55,6 +57,7 @@
   import PlusIcon from "@lucide/svelte/icons/plus";
   import LogInIcon from "@lucide/svelte/icons/log-in";
   import LogOutIcon from "@lucide/svelte/icons/log-out";
+  import Trash2Icon from "@lucide/svelte/icons/trash-2";
   import { DayFlag } from "@taptime/proto/taptime/day_pb.js";
   import type {
     DashboardResponse,
@@ -77,6 +80,7 @@
   let submitting = $state(false);
   let flagUpdating = $state(false);
   let overrideSaving = $state(false);
+  let deletingEventKey = $state<string | null>(null);
   let manualEventOpen = $state(false);
   let manualSubmitting = $state(false);
   let manualTarget = $state<ManualTarget>("today");
@@ -127,6 +131,8 @@
     selectedDayKey === null ? null : summaryByDay.get(selectedDayKey) ?? null,
   );
   const todaySessions = $derived(buildSessions(day, currentSeconds));
+  const todayEventItems = $derived(buildEventListItems(day));
+  const selectedEventItems = $derived(buildEventListItems(selectedSummary?.day));
   const monthSummaries = $derived(
     summaries.filter((summary) => {
       const key = dayKey(summary.day);
@@ -170,6 +176,7 @@
     manualSubmitting ||
       submitting ||
       flagUpdating ||
+      deletingEventKey !== null ||
       loading ||
       refreshing ||
       !manualTargetDate ||
@@ -188,6 +195,7 @@
     overrideSaving ||
       flagUpdating ||
       manualSubmitting ||
+      deletingEventKey !== null ||
       !selectedSummary?.day?.date ||
       overrideSeconds <= 0 ||
       !overrideDirty,
@@ -196,6 +204,7 @@
     overrideSaving ||
       flagUpdating ||
       manualSubmitting ||
+      deletingEventKey !== null ||
       !selectedSummary?.day?.date ||
       !selectedSummary.requiredWorkHoursOverridden,
   );
@@ -364,6 +373,20 @@
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
       manualSubmitting = false;
+    }
+  }
+
+  async function deleteEvent(item: EventListItem) {
+    if (!item.id || deletingEventKey !== null) return;
+    deletingEventKey = item.key;
+    try {
+      await StoreService.deleteEvent(item.id);
+      await loadDashboard(true);
+      tick();
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      deletingEventKey = null;
     }
   }
 
@@ -639,7 +662,7 @@
           <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               onclick={handleCheckInOut}
-              disabled={submitting || loading || manualSubmitting}
+              disabled={submitting || loading || manualSubmitting || deletingEventKey !== null}
               variant={isCheckedIn ? "outline" : "default"}
               class="w-full sm:w-36"
             >
@@ -684,7 +707,13 @@
                       resetManualEventForm("today");
                       manualEventOpen = true;
                     }}
-                    disabled={loading || submitting || flagUpdating || manualSubmitting}
+                    disabled={
+                      loading ||
+                      submitting ||
+                      flagUpdating ||
+                      manualSubmitting ||
+                      deletingEventKey !== null
+                    }
                     variant="secondary"
                     class="w-full sm:w-36"
                   >
@@ -809,19 +838,30 @@
           <ScrollArea.Root class="h-36 pr-3">
             {#if loading}
               <div class="text-muted-foreground text-sm">Loading...</div>
-            {:else if todaySessions.length === 0}
+            {:else if todayEventItems.length === 0}
               <div class="text-muted-foreground text-sm">No check-ins yet.</div>
             {:else}
               <div class="flex flex-col gap-2">
-                {#each todaySessions as session, index}
-                  <div class="grid grid-cols-[24px_1fr_auto] items-center gap-3 text-sm">
-                    <span class="text-muted-foreground tabular-nums">{index + 1}</span>
-                    <span class="font-mono tabular-nums">
-                      {formatTime(session.checkIn)} - {formatTime(session.checkOut)}
-                    </span>
-                    <span class="text-muted-foreground font-mono tabular-nums">
-                      {session.duration === null ? "--:--" : formatSeconds(session.duration)}
-                    </span>
+                {#each todayEventItems as item (item.key)}
+                  <div class="grid grid-cols-[24px_1fr_auto_auto] items-center gap-3 text-sm">
+                    <span class="text-muted-foreground tabular-nums">{item.index + 1}</span>
+                    <span>{item.label}</span>
+                    <span class="font-mono tabular-nums">{formatTime(item.time)}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      title={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      disabled={
+                        !item.id ||
+                        deletingEventKey !== null ||
+                        manualSubmitting ||
+                        submitting
+                      }
+                      onclick={() => deleteEvent(item)}
+                    >
+                      <Trash2Icon />
+                    </Button>
                   </div>
                 {/each}
               </div>
@@ -909,12 +949,58 @@
               <Switch.Root
                 checked={selectedHasFlag(control.flag)}
                 disabled={
-                  flagUpdating || !selectedSummary || selectedFlagDisabled(control.flag)
+                  flagUpdating ||
+                  deletingEventKey !== null ||
+                  !selectedSummary ||
+                  selectedFlagDisabled(control.flag)
                 }
                 onclick={() => toggleSelectedFlag(control.flag)}
               />
             </div>
           {/each}
+        </div>
+
+        <Separator />
+
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium">Events</div>
+              <div class="text-muted-foreground text-xs">
+                {selectedEventItems.length} taps
+              </div>
+            </div>
+          </div>
+          <ScrollArea.Root class="h-40 pr-3">
+            {#if selectedEventItems.length === 0}
+              <div class="text-muted-foreground text-sm">No events.</div>
+            {:else}
+              <div class="flex flex-col gap-2">
+                {#each selectedEventItems as item (item.key)}
+                  <div class="grid grid-cols-[24px_1fr_auto_auto] items-center gap-3 text-sm">
+                    <span class="text-muted-foreground tabular-nums">{item.index + 1}</span>
+                    <span>{item.label}</span>
+                    <span class="font-mono tabular-nums">{formatTime(item.time)}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      title={`Delete ${item.label} at ${formatTime(item.time)}`}
+                      disabled={
+                        !item.id ||
+                        deletingEventKey !== null ||
+                        manualSubmitting ||
+                        submitting
+                      }
+                      onclick={() => deleteEvent(item)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </ScrollArea.Root>
         </div>
       </Card.Content>
     </Card.Root>
