@@ -154,6 +154,11 @@ export class DaySummary extends Message<DaySummary> {
    */
   workTarget?: Duration;
 
+  /**
+   * @generated from field: bool before_start_date = 8;
+   */
+  beforeStartDate = false;
+
   constructor(data?: PartialMessage<DaySummary>) {
     super();
     proto3.util.initPartial(data, this);
@@ -169,6 +174,7 @@ export class DaySummary extends Message<DaySummary> {
     { no: 5, name: "full_day_worked", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 6, name: "required_work_hours_overridden", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 7, name: "work_target", kind: "message", T: Duration },
+    { no: 8, name: "before_start_date", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaySummary {

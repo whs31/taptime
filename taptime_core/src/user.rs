@@ -30,6 +30,7 @@ pub struct UserSettings {
   pub lunch_break_duration: chrono::Duration,
   pub weekends: Vec<chrono::Weekday>,
   pub remote_days: Vec<chrono::Weekday>,
+  pub start_date: Option<NaiveDate>,
 }
 
 const DEFAULT_REQUIRED_WORK_HOURS: chrono::Duration = chrono::Duration::hours(8);
@@ -42,12 +43,32 @@ impl Default for UserSettings {
       lunch_break_duration: DEFAULT_LUNCH_BREAK_DURATION,
       weekends: vec![chrono::Weekday::Sat, chrono::Weekday::Sun],
       remote_days: vec![],
+      start_date: None,
     }
   }
 }
 
 impl User {
+  #[inline]
+  pub fn is_before_start_date(&self, date: NaiveDate) -> bool {
+    self
+      .settings
+      .start_date
+      .map(|start_date| date < start_date)
+      .unwrap_or(false)
+  }
+
   pub fn new_day(&self, date: NaiveDate) -> Day {
+    if self.is_before_start_date(date) {
+      return Day {
+        date,
+        events: vec![],
+        flags: DayFlags::empty(),
+        required_work_hours: chrono::Duration::zero(),
+        lunch_break_duration: self.settings.lunch_break_duration,
+      };
+    }
+
     let weekday = date.weekday();
     let mut flags = DayFlags::empty();
     if self.settings.weekends.contains(&weekday) {
@@ -95,6 +116,7 @@ impl TryFrom<&taptime_schema::user::Settings> for UserSettings {
         .remote_days()
         .map(|w| w.try_into())
         .collect::<Result<_, _>>()?,
+      start_date: value.start_date.map(Into::into),
     })
   }
 }
@@ -114,6 +136,7 @@ impl From<&UserSettings> for taptime_schema::user::Settings {
         .iter()
         .map(|w| taptime_schema::Weekday::from(*w).into())
         .collect(),
+      start_date: value.start_date.map(Into::into),
     }
   }
 }

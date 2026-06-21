@@ -76,6 +76,18 @@ export function protoDate(daysSinceEpoch: number) {
   return new ProtoDate({ daysSinceEpoch });
 }
 
+export function dateInputValue(daysSinceEpoch: number | null | undefined) {
+  if (daysSinceEpoch === null || daysSinceEpoch === undefined) return "";
+  return new Date(daysSinceEpoch * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+export function parseDateInputDays(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const ms = Date.parse(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(ms)) return null;
+  return Math.floor(ms / MS_PER_DAY);
+}
+
 export function todayDate(timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -460,6 +472,7 @@ export function balanceLabel(
   liveSeconds?: number,
 ) {
   if (!summary) return "No data";
+  if (summary.beforeStartDate) return "Before start";
   if (summary.skipped) return "Skipped";
   const delta = liveBalanceSeconds(summary, liveDay, liveSeconds);
   if (delta > 0) return `Overtime ${formatHours(delta)}`;
@@ -469,6 +482,7 @@ export function balanceLabel(
 
 export function dayKindLabel(summary: DaySummary | null | undefined) {
   if (!summary?.day) return "No day";
+  if (summary.beforeStartDate) return "Before start";
   const labels = [];
   if (hasFlag(summary, DayFlag.WEEKEND)) labels.push("Weekend");
   if (hasFlag(summary, DayFlag.REMOTE)) labels.push("Remote");
@@ -479,6 +493,7 @@ export function dayKindLabel(summary: DaySummary | null | undefined) {
 
 export function flagLabels(summary: DaySummary | null | undefined) {
   if (!summary?.day) return [];
+  if (summary.beforeStartDate) return ["Before start"];
   const labels: string[] = [];
   if (hasFlag(summary, DayFlag.WEEKEND)) labels.push("Weekend");
   if (hasFlag(summary, DayFlag.REMOTE)) labels.push("Remote");
@@ -524,6 +539,7 @@ export function summarizeRange(items: DaySummary[]): RangeTotals {
   };
 
   for (const summary of items) {
+    if (summary.beforeStartDate) continue;
     const clocked = durationSeconds(summary.clockedWork);
     totals.totalClocked += clocked;
     if (clocked > 0 || (summary.day?.events.length ?? 0) > 0) totals.workedDays += 1;
@@ -571,6 +587,7 @@ export function monthlyBuckets(items: DaySummary[]): MonthlyBucket[] {
 export function exceptionRows(items: DaySummary[]): ExceptionRow[] {
   return items
     .flatMap((summary) => {
+      if (summary.beforeStartDate) return [];
       const key = dayKey(summary.day);
       if (key === null || !summary.day) return [];
       const clocked = durationSeconds(summary.clockedWork);
@@ -640,6 +657,7 @@ export function buildMonthRhythmModel(
   const points: ChartPoint[] = [];
 
   for (const summary of items) {
+    if (summary.beforeStartDate) continue;
     const key = dayKey(summary.day);
     if (key === null || !summary.day) continue;
     const dayNumber = key - monthStart + 1;

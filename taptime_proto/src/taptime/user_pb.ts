@@ -9,6 +9,7 @@ import { Uuid } from "./uuid_pb.js";
 import { Tz } from "./tz_pb.js";
 import { Uid } from "./uid_pb.js";
 import { Weekday } from "./weekday_pb.js";
+import { Date } from "./date_pb.js";
 
 /**
  * @generated from message com.whs31.taptime.User
@@ -119,6 +120,11 @@ export class User_Settings extends Message<User_Settings> {
    */
   remoteDays: Weekday[] = [];
 
+  /**
+   * @generated from field: com.whs31.taptime.Date start_date = 5;
+   */
+  startDate?: Date;
+
   constructor(data?: PartialMessage<User_Settings>) {
     super();
     proto3.util.initPartial(data, this);
@@ -131,6 +137,7 @@ export class User_Settings extends Message<User_Settings> {
     { no: 2, name: "lunch_break_duration", kind: "message", T: Duration },
     { no: 3, name: "weekends", kind: "enum", T: proto3.getEnumType(Weekday), repeated: true },
     { no: 4, name: "remote_days", kind: "enum", T: proto3.getEnumType(Weekday), repeated: true },
+    { no: 5, name: "start_date", kind: "message", T: Date },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): User_Settings {

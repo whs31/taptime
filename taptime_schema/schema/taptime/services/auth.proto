@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import public "google/protobuf/empty.proto";
 import public "google/protobuf/duration.proto";
+import public "taptime/date.proto";
 import public "taptime/user.proto";
 
 package com.whs31.taptime.services;
@@ -41,6 +42,7 @@ message UpdateSettingsRequest {
   google.protobuf.Duration lunch_break_duration = 3;
   repeated Weekday weekends = 4;
   repeated Weekday remote_days = 5;
+  Date start_date = 6;
 }
 
 message UpdateRfidUidRequest {

@@ -8,6 +8,7 @@ import { Duration, Message, proto3 } from "@bufbuild/protobuf";
 import { User } from "../user_pb.js";
 import { Tz } from "../tz_pb.js";
 import { Weekday } from "../weekday_pb.js";
+import { Date } from "../date_pb.js";
 import { Uid } from "../uid_pb.js";
 
 /**
@@ -176,6 +177,11 @@ export class UpdateSettingsRequest extends Message<UpdateSettingsRequest> {
    */
   remoteDays: Weekday[] = [];
 
+  /**
+   * @generated from field: com.whs31.taptime.Date start_date = 6;
+   */
+  startDate?: Date;
+
   constructor(data?: PartialMessage<UpdateSettingsRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -189,6 +195,7 @@ export class UpdateSettingsRequest extends Message<UpdateSettingsRequest> {
     { no: 3, name: "lunch_break_duration", kind: "message", T: Duration },
     { no: 4, name: "weekends", kind: "enum", T: proto3.getEnumType(Weekday), repeated: true },
     { no: 5, name: "remote_days", kind: "enum", T: proto3.getEnumType(Weekday), repeated: true },
+    { no: 6, name: "start_date", kind: "message", T: Date },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateSettingsRequest {

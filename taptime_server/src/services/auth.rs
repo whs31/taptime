@@ -174,6 +174,7 @@ fn settings_from_update_request(
     lunch_break_duration: req.lunch_break_duration,
     weekends: req.weekends.clone(),
     remote_days: req.remote_days.clone(),
+    start_date: req.start_date,
   };
   let settings = taptime_core::UserSettings::try_from(&proto_settings)
     .map_err(|e: taptime_schema::Error| Status::invalid_argument(e.to_string()))?;
@@ -242,6 +243,7 @@ impl AuthService for AuthServiceImpl {
       .bind(settings.lunch_break_duration.num_seconds())
       .bind(&weekends)
       .bind(&remote_days)
+      .bind(settings.start_date.map(|date| date.to_epoch_days()))
       .execute(&mut *tx)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
@@ -369,6 +371,7 @@ impl AuthService for AuthServiceImpl {
       .bind(settings.lunch_break_duration.num_seconds())
       .bind(&weekends)
       .bind(&remote_days)
+      .bind(settings.start_date.map(|date| date.to_epoch_days()))
       .execute(&self.db)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;

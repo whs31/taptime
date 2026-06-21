@@ -497,6 +497,9 @@
 
   function calendarCellStyle(summary: DaySummary | null) {
     if (!summary?.day) return "background-color: transparent;";
+    if (summary.beforeStartDate) {
+      return activityCell(themeMix("--muted", 76));
+    }
     if (hasFlag(summary, DayFlag.DAY_OFF)) {
       return activityCell(themeMix("--muted-foreground", 28));
     }
@@ -504,7 +507,7 @@
       return activityCell(themeMix("--primary", 48));
     }
     if (hasFlag(summary, DayFlag.REMOTE)) {
-      return activityCell(themeMix("--chart-3", 58));
+      return activityCell(themeMix("--activity-remote", 62));
     }
     if (hasFlag(summary, DayFlag.WEEKEND)) {
       return summary.fullDayWorked
@@ -545,8 +548,10 @@
     stats: MonthlyStats | null,
     today: DaySummary | null,
   ) {
-    const closedToday = durationSeconds(today?.clockedWork);
-    const liveToday = summaryClockedSeconds(today);
+    const closedToday = today?.beforeStartDate
+      ? 0
+      : durationSeconds(today?.clockedWork);
+    const liveToday = today?.beforeStartDate ? 0 : summaryClockedSeconds(today);
     const liveDelta = Math.max(0, liveToday - closedToday);
     let totalClocked = durationSeconds(stats?.totalClockedWork) + liveDelta;
     let overtime = durationSeconds(stats?.overtime);

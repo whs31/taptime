@@ -43,6 +43,7 @@ message DaySummary {
   bool full_day_worked = 5;
   bool required_work_hours_overridden = 6;
   google.protobuf.Duration work_target = 7;
+  bool before_start_date = 8;
 }
 
 message MonthlyStats {

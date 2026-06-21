@@ -3,6 +3,7 @@
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import {
     LunchBreakSelect,
@@ -11,7 +12,13 @@
     WorkHoursInput,
   } from "$lib/blocks/components";
   import { weekdayKey, weekdayLabel } from "$lib/account";
-  import { durationSeconds, formatHours } from "$lib/dashboard";
+  import {
+    dateInputValue,
+    durationSeconds,
+    formatHours,
+    parseDateInputDays,
+    protoDate,
+  } from "$lib/dashboard";
   import { AuthService } from "$lib/services";
   import { userStore } from "$lib/stores";
   import { Tz } from "@taptime/proto/taptime/tz_pb.js";
@@ -29,6 +36,7 @@
   let lunchMinutes = $state(30);
   let weekends = $state<Weekday[]>([Weekday.SATURDAY, Weekday.SUNDAY]);
   let remoteDays = $state<Weekday[]>([]);
+  let startDateValue = $state("");
   let saving = $state(false);
   let error = $state<string | null>(null);
   let success = $state<string | null>(null);
@@ -37,6 +45,9 @@
   const settings = $derived(user?.settings);
   const workSeconds = $derived(workHours * 3600 + workMinutes * 60);
   const lunchSeconds = $derived(lunchMinutes * 60);
+  const startDateDays = $derived(parseDateInputDays(startDateValue));
+  const startDateInvalid = $derived(startDateValue.length > 0 && startDateDays === null);
+  const savedStartDateDays = $derived(settings?.startDate?.daysSinceEpoch ?? null);
   const settingsDirty = $derived(
     Boolean(
       settings &&
@@ -44,11 +55,16 @@
           workSeconds !== durationSeconds(settings.requiredWorkHours) ||
           lunchSeconds !== durationSeconds(settings.lunchBreakDuration) ||
           weekdayKey(weekends) !== weekdayKey(settings.weekends) ||
-          weekdayKey(remoteDays) !== weekdayKey(settings.remoteDays)),
+          weekdayKey(remoteDays) !== weekdayKey(settings.remoteDays) ||
+          startDateDays !== savedStartDateDays),
     ),
   );
   const saveDisabled = $derived(
-    saving || !settingsDirty || timezone.length === 0 || workSeconds <= 0,
+    saving ||
+      !settingsDirty ||
+      timezone.length === 0 ||
+      workSeconds <= 0 ||
+      startDateInvalid,
   );
 
   $effect(() => {
@@ -59,6 +75,7 @@
       durationSeconds(user.settings.lunchBreakDuration),
       weekdayKey(user.settings.weekends),
       weekdayKey(user.settings.remoteDays),
+      user.settings.startDate?.daysSinceEpoch ?? "none",
     ].join(":");
     if (key !== loadedSettingsKey) {
       loadedSettingsKey = key;
@@ -69,6 +86,7 @@
       lunchMinutes = Math.floor(durationSeconds(user.settings.lunchBreakDuration) / 60);
       weekends = [...user.settings.weekends];
       remoteDays = [...user.settings.remoteDays];
+      startDateValue = dateInputValue(user.settings.startDate?.daysSinceEpoch);
     }
   });
 
@@ -85,6 +103,10 @@
           lunchBreakDuration: new Duration({ seconds: BigInt(lunchSeconds) }),
           weekends,
           remoteDays,
+          startDate:
+            startDateValue.length > 0 && startDateDays !== null
+              ? protoDate(startDateDays)
+              : undefined,
         }),
       );
       userStore.set(updated);
@@ -154,6 +176,19 @@
           <Label>Remote days</Label>
           <WeekdaySelect bind:value={remoteDays} />
         </div>
+
+        <div class="grid gap-2">
+          <Label for="settings-start-date">First counted work date</Label>
+          <Input
+            id="settings-start-date"
+            type="date"
+            bind:value={startDateValue}
+            aria-invalid={startDateInvalid}
+          />
+          <p class="text-muted-foreground text-xs">
+            Days before this date stay visible, but do not count toward skipped days, undertime, or reports.
+          </p>
+        </div>
       </Card.Content>
       <Card.Footer class="justify-end">
         <Button onclick={saveSettings} disabled={saveDisabled}>
@@ -195,6 +230,10 @@
           <div>
             <div class="text-muted-foreground text-xs uppercase">Remote Days</div>
             <div>{weekdayLabel(remoteDays)}</div>
+          </div>
+          <div>
+            <div class="text-muted-foreground text-xs uppercase">First Counted Date</div>
+            <div>{startDateValue || "All history"}</div>
           </div>
         </Card.Content>
       </Card.Root>

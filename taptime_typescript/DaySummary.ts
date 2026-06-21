@@ -11,4 +11,5 @@ export type DaySummary = {
   fullDayWorked: boolean;
   requiredWorkHoursOverridden: boolean;
   workTarget: Duration | null;
+  beforeStartDate: boolean;
 };

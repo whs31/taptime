@@ -52,6 +52,7 @@ struct DayRequiredWorkOverrideRangeRow {
 struct BuiltDay {
   day: Day,
   event_ids: Vec<Uuid>,
+  before_start_date: bool,
   work_target: Duration,
   required_work_hours_overridden: bool,
 }
@@ -159,8 +160,8 @@ fn is_calendar_regular_required_day(day: &Day) -> bool {
     .intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION | DayFlags::REMOTE)
 }
 
-fn dashboard_balance(day: &Day) -> Balance {
-  if is_non_required_day(day) || day.is_remote() {
+fn dashboard_balance(day: &Day, before_start_date: bool) -> Balance {
+  if before_start_date || is_non_required_day(day) || day.is_remote() {
     Balance::Exact
   } else {
     Balance::calculate(
@@ -181,15 +182,16 @@ fn is_skipped_day(day: &Day, today: NaiveDate, clocked_work: Duration) -> bool {
 fn summarize_day(built_day: &BuiltDay, today: NaiveDate) -> DaySummary {
   let day = &built_day.day;
   let clocked_work = day.clocked_work_duration();
-  let balance = dashboard_balance(day);
+  let balance = dashboard_balance(day, built_day.before_start_date);
   DaySummary {
     day: Some(schema_day_from_built_day(built_day)),
     clocked_work: Some(clocked_work.into()),
     balance: Some(taptime_schema::Balance::from(&balance)),
-    skipped: is_skipped_day(day, today, clocked_work),
-    full_day_worked: day.full_day_worked(built_day.work_target),
+    skipped: !built_day.before_start_date && is_skipped_day(day, today, clocked_work),
+    full_day_worked: !built_day.before_start_date && day.full_day_worked(built_day.work_target),
     required_work_hours_overridden: built_day.required_work_hours_overridden,
     work_target: Some(built_day.work_target.into()),
+    before_start_date: built_day.before_start_date,
   }
 }
 
@@ -213,19 +215,25 @@ fn build_days_from_maps(
   let mut date = start;
   loop {
     let days_since_epoch = date_to_epoch_days(date);
+    let before_start_date = user.is_before_start_date(date);
     let mut day = user.new_day(date);
     let flags = flags_by_day
       .get(&days_since_epoch)
       .copied()
       .unwrap_or(day.flags);
     let override_duration = overrides_by_day.get(&days_since_epoch).copied();
-    let work_target = apply_day_configuration(&mut day, flags, user, override_duration);
+    let mut work_target = apply_day_configuration(&mut day, flags, user, override_duration);
+    if before_start_date {
+      day.required_work_hours = Duration::zero();
+      work_target = Duration::zero();
+    }
     let stored_events = events_by_day.remove(&days_since_epoch).unwrap_or_default();
     let event_ids = stored_events.iter().map(|event| event.id).collect();
     day.events = stored_events.into_iter().map(|event| event.event).collect();
     days.push(BuiltDay {
       day,
       event_ids,
+      before_start_date,
       work_target,
       required_work_hours_overridden: override_duration.is_some(),
     });
@@ -262,6 +270,9 @@ fn build_monthly_stats(
 
   for built_day in days {
     let day = &built_day.day;
+    if built_day.before_start_date {
+      continue;
+    }
     if day.date < month_start || day.date > month_end || day.date > today {
       continue;
     }
@@ -292,7 +303,7 @@ fn build_monthly_stats(
       monthly_stats.full_vacation_work_days += 1;
     }
     if is_calendar_regular_required_day(day) {
-      match dashboard_balance(day) {
+      match dashboard_balance(day, built_day.before_start_date) {
         Balance::Overtime(duration) => overtime = overtime + duration,
         Balance::UnderTime(duration) => undertime = undertime + duration,
         Balance::Exact => {}
@@ -702,6 +713,7 @@ mod tests {
     BuiltDay {
       day,
       event_ids: vec![],
+      before_start_date: false,
       work_target: user.settings.required_work_hours,
       required_work_hours_overridden: false,
     }
@@ -789,6 +801,36 @@ mod tests {
     assert_eq!(days[1].day.required_work_hours, Duration::hours(8));
     assert_eq!(days[1].work_target, Duration::hours(8));
     assert!(!days[1].required_work_hours_overridden);
+  }
+
+  #[test]
+  fn days_before_user_start_date_do_not_count() {
+    let mut user = make_user();
+    user.settings.start_date = Some(date(2024, 1, 2));
+
+    let days = build_days_from_maps(
+      &user,
+      date(2024, 1, 1),
+      date(2024, 1, 2),
+      &BTreeMap::new(),
+      &BTreeMap::new(),
+      BTreeMap::new(),
+    )
+    .unwrap();
+
+    assert!(days[0].before_start_date);
+    assert_eq!(days[0].day.required_work_hours, Duration::zero());
+    assert_eq!(days[0].work_target, Duration::zero());
+    assert!(!days[1].before_start_date);
+    assert_eq!(days[1].day.required_work_hours, Duration::hours(8));
+
+    let summary = summarize_day(&days[0], date(2024, 1, 3));
+    assert!(summary.before_start_date);
+    assert!(!summary.skipped);
+
+    let stats = build_monthly_stats(&days, date(2024, 1, 1), date(2024, 1, 31), date(2024, 1, 3));
+    assert_eq!(stats.skipped_days, 1);
+    assert_eq!(duration_seconds(&stats.undertime), 8 * 60 * 60 + 30 * 60);
   }
 
   #[test]

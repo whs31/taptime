@@ -4,6 +4,7 @@ package com.whs31.taptime;
 
 import public "google/protobuf/duration.proto";
 import public "google/protobuf/timestamp.proto";
+import public "taptime/date.proto";
 import public "taptime/tz.proto";
 import public "taptime/uid.proto";
 import public "taptime/uuid.proto";
@@ -15,6 +16,7 @@ message User {
     google.protobuf.Duration lunch_break_duration = 2;
     repeated Weekday weekends = 3;
     repeated Weekday remote_days = 4;
+    Date start_date = 5;
   }
 
   message Credentials {

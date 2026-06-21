@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   required_work_hours_secs  BIGINT      NOT NULL DEFAULT 28800,
   lunch_break_duration_secs BIGINT      NOT NULL DEFAULT 1800,
   weekends                  INT[]       NOT NULL DEFAULT ARRAY[6, 7],
-  remote_days               INT[]       NOT NULL DEFAULT ARRAY[]::INT[]
+  remote_days               INT[]       NOT NULL DEFAULT ARRAY[]::INT[],
+  start_date_days           INT
 );
 
 CREATE TABLE IF NOT EXISTS user_credentials (

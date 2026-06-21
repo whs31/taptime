@@ -60,7 +60,7 @@
   const maxMonthlyBalance = $derived(Math.max(3_600, ...months.map((month) => Math.abs(month.overtime - month.undertime))));
   const maxWorked = $derived(Math.max(3_600, ...workBuckets.map((bucket) => bucket.value)));
   const statusBars = $derived([
-    { label: "Remote", value: totals.remoteDays, color: "var(--chart-3)" },
+    { label: "Remote", value: totals.remoteDays, color: "var(--activity-remote)" },
     { label: "Day off", value: totals.dayOffs, color: "var(--muted-foreground)" },
     { label: "Vacation", value: totals.vacationDays, color: "var(--primary)" },
     { label: "Skipped", value: totals.skippedDays, color: "var(--destructive)" },
@@ -136,6 +136,7 @@
   function buildWorkBuckets(items: DaySummary[], start: number, end: number): WorkBucket[] {
     if (end - start <= 45) {
       return items
+        .filter((summary) => !summary.beforeStartDate)
         .map((summary) => {
           const key = dayKey(summary.day);
           return key === null
@@ -154,7 +155,9 @@
       const bucketEnd = Math.min(end, cursor + 6);
       const value = items.reduce((total, summary) => {
         const key = dayKey(summary.day);
-        if (key === null || key < cursor || key > bucketEnd) return total;
+        if (summary.beforeStartDate || key === null || key < cursor || key > bucketEnd) {
+          return total;
+        }
         return total + Number(summary.clockedWork?.seconds ?? 0n);
       }, 0);
       buckets.push({

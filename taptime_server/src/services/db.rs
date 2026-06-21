@@ -21,6 +21,7 @@ pub(super) struct UserRow {
   pub lunch_break_duration_secs: i64,
   pub weekends: Vec<i32>,
   pub remote_days: Vec<i32>,
+  pub start_date_days: Option<i32>,
 }
 
 pub(super) fn weekday_from_iso(n: i32) -> chrono::Weekday {
@@ -65,6 +66,9 @@ pub(super) fn row_to_core_user(row: UserRow) -> Result<taptime_core::User, Statu
       lunch_break_duration: chrono::Duration::seconds(row.lunch_break_duration_secs),
       weekends: row.weekends.into_iter().map(weekday_from_iso).collect(),
       remote_days: row.remote_days.into_iter().map(weekday_from_iso).collect(),
+      start_date: row
+        .start_date_days
+        .and_then(chrono::NaiveDate::from_epoch_days),
     },
   })
 }
