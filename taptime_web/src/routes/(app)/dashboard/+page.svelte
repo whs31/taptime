@@ -664,9 +664,9 @@
   });
 </script>
 
-<div class="py-4 flex flex-col gap-6" aria-busy={loading || refreshing}>
-  <div class="flex flex-col gap-1">
-    <h2 class="text-2xl font-semibold">Dashboard</h2>
+<div class="flex flex-col gap-4 py-3" aria-busy={loading || refreshing}>
+  <div class="flex flex-col gap-0.5">
+    <h2 class="text-xl font-semibold">Dashboard</h2>
     <p class="text-muted-foreground text-sm">
       Today, rolling activity, and month-to-date work.
     </p>
@@ -678,25 +678,25 @@
     </div>
   {/if}
 
-  <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <Card.Root>
-      <Card.Header>
+  <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <Card.Root class="self-start">
+      <Card.Header class="pb-3">
         <Card.Title>Today</Card.Title>
         <Card.Description>{dateLabel(todayDays)}</Card.Description>
       </Card.Header>
-      <Card.Content class="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
-        <div class="flex flex-col gap-5">
+      <Card.Content class="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
+        <div class="flex flex-col gap-4">
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="flex flex-col gap-1">
               <span class="text-muted-foreground text-xs uppercase">Current time</span>
-              <span class="font-mono text-4xl font-semibold tabular-nums">
+              <span class="font-mono text-3xl font-semibold tabular-nums lg:text-4xl">
                 {currentTimeDisplay}
               </span>
             </div>
             <div class="flex flex-col gap-1">
               <span class="text-muted-foreground text-xs uppercase">Work time</span>
               <span
-                class="font-mono text-4xl font-semibold tabular-nums transition-colors {isCheckedIn
+                class="font-mono text-3xl font-semibold tabular-nums transition-colors lg:text-4xl {isCheckedIn
                   ? 'text-primary'
                   : ''}"
               >
@@ -883,13 +883,13 @@
           </div>
         </div>
 
-        <div class="flex min-h-40 flex-col gap-3">
+        <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-medium">Today history</span>
             <span class="text-muted-foreground text-xs">{todaySessions.length} sessions</span>
           </div>
           <Separator />
-          <ScrollArea.Root class="h-36 pr-3">
+          <ScrollArea.Root class="h-28 pr-3">
             {#if loading}
               <div class="text-muted-foreground text-sm">Loading...</div>
             {:else if todayEventItems.length === 0}
@@ -925,8 +925,8 @@
       </Card.Content>
     </Card.Root>
 
-    <Card.Root>
-      <Card.Header>
+    <Card.Root class="self-start">
+      <Card.Header class="pb-3">
         <Card.Title>Selected Day</Card.Title>
         <Card.Description>
           {selectedSummary?.day?.date
@@ -934,8 +934,8 @@
             : "Pick a day"}
         </Card.Description>
       </Card.Header>
-      <Card.Content class="flex flex-col gap-4">
-        <div class="grid grid-cols-2 gap-3 text-sm">
+      <Card.Content class="flex flex-col gap-3">
+        <div class="grid grid-cols-2 gap-2 text-sm">
           <div>
             <div class="text-muted-foreground text-xs uppercase">Status</div>
             <div class="font-medium">{dayKindLabel(selectedSummary)}</div>
@@ -958,7 +958,7 @@
 
         <Separator />
 
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="text-sm font-medium">Required Work Override</div>
@@ -996,7 +996,7 @@
 
         <Separator />
 
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
           {#each flagControls as control}
             <div class="flex items-center justify-between gap-3">
               <span class="text-sm">{control.label}</span>
@@ -1016,7 +1016,7 @@
 
         <Separator />
 
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between gap-3">
             <div>
               <div class="text-sm font-medium">Events</div>
@@ -1025,7 +1025,7 @@
               </div>
             </div>
           </div>
-          <ScrollArea.Root class="h-40 pr-3">
+          <ScrollArea.Root class="h-32 pr-3">
             {#if selectedEventItems.length === 0}
               <div class="text-muted-foreground text-sm">No events.</div>
             {:else}
@@ -1061,15 +1061,15 @@
   </div>
 
   <Card.Root>
-    <Card.Header>
+    <Card.Header class="items-center pb-3 text-center">
       <Card.Title>Activity</Card.Title>
       <Card.Description>Rolling year ending today</Card.Description>
     </Card.Header>
-    <Card.Content class="overflow-x-auto">
+    <Card.Content class="overflow-x-auto pb-4">
       {#if loading}
         <div class="text-muted-foreground text-sm">Loading...</div>
       {:else}
-        <div class="grid grid-cols-[32px_1fr] gap-2">
+        <div class="mx-auto grid w-max grid-cols-[32px_max-content] gap-2">
           <div class="grid grid-rows-7 gap-[3px] text-[10px] text-muted-foreground">
             <span>Mon</span>
             <span></span>
@@ -1125,16 +1125,16 @@
     </Card.Content>
   </Card.Root>
 
-  <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1fr)]">
-    <Card.Root>
-      <Card.Header>
+  <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1fr)]">
+    <Card.Root class="self-start">
+      <Card.Header class="pb-3">
         <Card.Title>{monthLabel(todayDays)}</Card.Title>
         <Card.Description>Month-to-date stats</Card.Description>
       </Card.Header>
       <Card.Content>
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {#each statItems as item}
-            <div class="rounded-md border bg-muted/30 px-3 py-2">
+            <div class="rounded-md border bg-muted/30 px-2.5 py-2">
               <div class="text-muted-foreground text-xs uppercase">{item.label}</div>
               <div class="mt-1 font-mono text-lg font-semibold tabular-nums">
                 {item.value}
@@ -1145,7 +1145,7 @@
       </Card.Content>
     </Card.Root>
 
-    <Card.Root>
+    <Card.Root class="self-start">
       <Card.Header class="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="space-y-1">
           <Card.Title>Month Rhythm</Card.Title>
@@ -1175,7 +1175,7 @@
         <div class="w-full overflow-x-auto">
           <svg
             viewBox="0 0 720 240"
-            class="h-[260px] min-w-[620px] w-full text-xs"
+            class="h-[220px] min-w-[620px] w-full text-xs"
             role="img"
             aria-label="Month check-in and checkout chart"
           >
