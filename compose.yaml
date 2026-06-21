@@ -1,0 +1,52 @@
+name: taptime
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  server:
+    build:
+      context: .
+      dockerfile: taptime_server/Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-50051}:50051"
+
+  web:
+    build:
+      context: .
+      dockerfile: taptime_web/Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      server:
+        condition: service_started
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:

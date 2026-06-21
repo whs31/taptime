@@ -1,3 +1,5 @@
+use std::path::Path;
+
 const SERDE_DERIVES: &str = "serde::Serialize, serde::Deserialize";
 const SERDE_ATTRIBUTES: &str = "#[serde(rename_all = \"camelCase\")]";
 const TYPESCRIPT_DERIVES: &str = "ts_rs::TS";
@@ -40,24 +42,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if cfg!(feature = "wkt") {
     b = b.compile_well_known_types(true)
   }
-  b.compile_protos(
-    &[
-      "schema/taptime/balance.proto",
-      "schema/taptime/date.proto",
-      "schema/taptime/day.proto",
-      "schema/taptime/event.proto",
-      "schema/taptime/local_time.proto",
-      "schema/taptime/tz.proto",
-      "schema/taptime/uid.proto",
-      "schema/taptime/user.proto",
-      "schema/taptime/uuid.proto",
-      "schema/taptime/weekday.proto",
-      #[cfg(feature = "grpc")]
-      "schema/taptime/services/auth.proto",
-      #[cfg(feature = "grpc")]
-      "schema/taptime/services/store.proto",
-    ],
-    &["schema"],
-  )?;
+  let mut protos = vec![
+    "schema/taptime/balance.proto".to_string(),
+    "schema/taptime/date.proto".to_string(),
+    "schema/taptime/day.proto".to_string(),
+    "schema/taptime/event.proto".to_string(),
+    "schema/taptime/local_time.proto".to_string(),
+    "schema/taptime/tz.proto".to_string(),
+    "schema/taptime/uid.proto".to_string(),
+    "schema/taptime/user.proto".to_string(),
+    "schema/taptime/uuid.proto".to_string(),
+    "schema/taptime/weekday.proto".to_string(),
+  ];
+  if cfg!(feature = "grpc") {
+    protos.push("schema/taptime/services/auth.proto".to_string());
+    protos.push("schema/taptime/services/store.proto".to_string());
+  }
+
+  let mut includes = vec!["schema".to_string()];
+  if let Ok(include) = std::env::var("PROTOC_INCLUDE") {
+    includes.push(include);
+  } else if Path::new("/usr/include").exists() {
+    includes.push("/usr/include".to_string());
+  }
+
+  b.compile_protos(&protos, &includes)?;
   Ok(())
 }
