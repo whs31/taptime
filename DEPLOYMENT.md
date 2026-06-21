@@ -24,6 +24,10 @@ Generate an admin password hash locally:
 cargo run --manifest-path taptime_admin_cli/Cargo.toml -- hash-password
 ```
 
+Argon2 hashes include a random salt, so the same password intentionally prints a
+different PHC string each time. Any generated hash for the password will verify;
+store one full string in `ADMIN_PASSWORD_HASH`.
+
 The default bind addresses expose both services only on host loopback:
 
 ```env
@@ -59,6 +63,43 @@ PUBLIC_API_URL=https://api.example.com
 ```
 
 Do not set `PUBLIC_API_URL` to `http://server:50051`; that name only exists inside Docker and is not reachable by browsers.
+
+The web app uses gRPC-Web and can be proxied with normal HTTP proxying. The
+admin CLI is a native tonic gRPC client, so the admin service path must be
+proxied with HTTP/2 gRPC support if you run it through Nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name api.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+
+    # Native gRPC for taptime_admin_cli.
+    location /com.whs31.taptime.services.AdminService/ {
+        grpc_pass grpc://127.0.0.1:50051;
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # gRPC-Web for the browser app.
+    location / {
+        proxy_pass http://127.0.0.1:50051;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Without that `grpc_pass` location, `taptime_admin_cli --admin-api-url=https://...`
+can fail with native HTTP/2 errors such as `FRAME_SIZE_ERROR`.
 
 ## 4. Operations
 
