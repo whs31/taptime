@@ -14,5 +14,5 @@ prost-types = { version = "0.14", features = ["chrono"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 ratatui = "0.29"
 tokio = { version = "1", features = ["full"] }
-tonic = "0.14"
+tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 uuid = "1"
