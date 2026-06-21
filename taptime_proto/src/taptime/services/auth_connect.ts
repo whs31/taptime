@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthResponse, LoginRequest, RegisterUserRequest } from "./auth_pb.js";
+import { AuthResponse, DeleteAccountRequest, LoginRequest, RegisterUserRequest, UpdateProfileRequest, UpdateRfidUidRequest, UpdateSettingsRequest } from "./auth_pb.js";
 import { Empty, MethodKind } from "@bufbuild/protobuf";
 import { User } from "../user_pb.js";
 
@@ -38,6 +38,51 @@ export const AuthService = {
       name: "GetUser",
       I: Empty,
       O: User,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.AuthService.UpdateProfile
+     */
+    updateProfile: {
+      name: "UpdateProfile",
+      I: UpdateProfileRequest,
+      O: User,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.AuthService.UpdateSettings
+     */
+    updateSettings: {
+      name: "UpdateSettings",
+      I: UpdateSettingsRequest,
+      O: User,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.AuthService.UpdateRfidUid
+     */
+    updateRfidUid: {
+      name: "UpdateRfidUid",
+      I: UpdateRfidUidRequest,
+      O: User,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.AuthService.DeleteTimeData
+     */
+    deleteTimeData: {
+      name: "DeleteTimeData",
+      I: Empty,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.AuthService.DeleteAccount
+     */
+    deleteAccount: {
+      name: "DeleteAccount",
+      I: DeleteAccountRequest,
+      O: Empty,
       kind: MethodKind.Unary,
     },
   }

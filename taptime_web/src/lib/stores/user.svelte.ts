@@ -24,6 +24,11 @@ function clearUser(): void {
   AuthService.logout();
 }
 
+function setUser(user: User | null): void {
+  _user = user;
+  _error = null;
+}
+
 export const userStore = {
   get user(): User | null {
     return _user;
@@ -35,5 +40,6 @@ export const userStore = {
     return _error;
   },
   fetch: fetchUser,
+  set: setUser,
   clear: clearUser,
 };

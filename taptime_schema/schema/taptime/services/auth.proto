@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import public "google/protobuf/empty.proto";
+import public "google/protobuf/duration.proto";
 import public "taptime/user.proto";
 
 package com.whs31.taptime.services;
@@ -9,6 +10,11 @@ service AuthService {
   rpc RegisterUser(RegisterUserRequest) returns (AuthResponse);
   rpc Login(LoginRequest) returns (AuthResponse);
   rpc GetUser(google.protobuf.Empty) returns (User);
+  rpc UpdateProfile(UpdateProfileRequest) returns (User);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (User);
+  rpc UpdateRfidUid(UpdateRfidUidRequest) returns (User);
+  rpc DeleteTimeData(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);
 }
 
 message RegisterUserRequest {
@@ -21,6 +27,28 @@ message RegisterUserRequest {
 message LoginRequest {
   string email = 1;
   string password = 2;
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string email = 2;
+  optional string organization = 3;
+}
+
+message UpdateSettingsRequest {
+  Tz time_zone = 1;
+  google.protobuf.Duration required_work_hours = 2;
+  google.protobuf.Duration lunch_break_duration = 3;
+  repeated Weekday weekends = 4;
+  repeated Weekday remote_days = 5;
+}
+
+message UpdateRfidUidRequest {
+  optional Uid rfid_uid = 1;
+}
+
+message DeleteAccountRequest {
+  string password = 1;
 }
 
 message AuthResponse {

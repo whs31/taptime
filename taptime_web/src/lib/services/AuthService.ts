@@ -2,10 +2,15 @@ import { createClient } from "@connectrpc/connect";
 import { AuthService as AuthServiceClient } from "@taptime/proto/taptime/services/auth_connect.js";
 import type { User } from "@taptime/proto/taptime/user_pb.js";
 import {
-  LoginRequest,
   AuthResponse,
+  DeleteAccountRequest,
+  LoginRequest,
   RegisterUserRequest,
+  UpdateProfileRequest,
+  UpdateRfidUidRequest,
+  UpdateSettingsRequest,
 } from "@taptime/proto/taptime/services/auth_pb.js";
+import type { Uid } from "@taptime/proto/taptime/uid_pb.js";
 import { transport } from "$lib/grpc";
 
 export class AuthService {
@@ -46,6 +51,46 @@ export class AuthService {
       }),
     );
     return this.processResponse(response);
+  }
+
+  static async updateProfile(
+    name: string,
+    email: string,
+    organization?: string,
+  ): Promise<User> {
+    return this.client.updateProfile(
+      new UpdateProfileRequest({
+        name: name.trim(),
+        email: email.trim(),
+        organization: organization?.trim() || undefined,
+      }),
+      { headers: this.authHeaders() },
+    );
+  }
+
+  static async updateSettings(request: UpdateSettingsRequest): Promise<User> {
+    return this.client.updateSettings(request, {
+      headers: this.authHeaders(),
+    });
+  }
+
+  static async updateRfidUid(rfidUid?: Uid): Promise<User> {
+    return this.client.updateRfidUid(
+      new UpdateRfidUidRequest({ rfidUid }),
+      { headers: this.authHeaders() },
+    );
+  }
+
+  static async deleteTimeData(): Promise<void> {
+    await this.client.deleteTimeData({}, { headers: this.authHeaders() });
+  }
+
+  static async deleteAccount(password: string): Promise<void> {
+    await this.client.deleteAccount(
+      new DeleteAccountRequest({ password }),
+      { headers: this.authHeaders() },
+    );
+    this.clearStoredJwt();
   }
 
   static authHeaders(): Record<string, string> {
