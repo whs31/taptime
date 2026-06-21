@@ -28,6 +28,14 @@ Argon2 hashes include a random salt, so the same password intentionally prints a
 different PHC string each time. Any generated hash for the password will verify;
 store one full string in `ADMIN_PASSWORD_HASH`.
 
+Argon2 PHC strings contain `$` separators. In `.env.production`, wrap the hash
+in single quotes so Docker Compose does not treat those fields as variable
+interpolation:
+
+```env
+ADMIN_PASSWORD_HASH='$argon2id$v=19$m=19456,t=2,p=1$...$...'
+```
+
 The default bind addresses expose both services only on host loopback:
 
 ```env

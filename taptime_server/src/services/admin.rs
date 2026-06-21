@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use argon2::PasswordHash;
 use chrono::{TimeZone, Utc};
 use taptime_schema::{
   User,
@@ -82,6 +83,9 @@ impl AdminServiceImpl {
     admin_password_hash: Option<String>,
     token_ttl: chrono::Duration,
   ) -> Self {
+    let admin_password_hash = admin_password_hash
+      .map(|hash| hash.trim().to_string())
+      .filter(|hash| !hash.is_empty());
     Self {
       db,
       jwt_secret,
@@ -194,6 +198,11 @@ impl AdminService for AdminServiceImpl {
     let Some(password_hash) = &self.admin_password_hash else {
       return Err(Status::failed_precondition("Admin access is disabled"));
     };
+    PasswordHash::new(password_hash).map_err(|_| {
+      Status::failed_precondition(
+        "ADMIN_PASSWORD_HASH is not a valid Argon2 PHC string; if using Docker Compose, wrap the hash in single quotes so $ fields are not interpolated",
+      )
+    })?;
     let req = request.into_inner();
     verify_password(&req.password, password_hash)?;
     let (token, expires_at) = crate::jwt::sign_admin(&self.jwt_secret, self.token_ttl)?;
