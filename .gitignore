@@ -1,6 +1,9 @@
-/target
+**/target
 .idea
 server/.env
 server/*.db
 server/.venv
 server/taptime/__pycache__
+*.local.*
+**/node_modules
+.env.production

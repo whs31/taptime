@@ -1,0 +1,119 @@
+import { createClient } from "@connectrpc/connect";
+import type { Duration } from "@bufbuild/protobuf";
+import { StoreService as StoreServiceRpc } from "@taptime/proto/taptime/services/store_connect.js";
+import { Date as ProtoDate } from "@taptime/proto/taptime/date_pb.js";
+import type { DayFlag } from "@taptime/proto/taptime/day_pb.js";
+import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
+import {
+  DashboardRequest,
+  EventRequest,
+  SetFlagRequest,
+  SetRequiredWorkHoursOverrideRequest,
+} from "@taptime/proto/taptime/services/store_pb.js";
+import { transport } from "$lib/grpc";
+import { AuthService } from "./AuthService";
+
+type DashboardRangeInput = {
+  rangeStart: ProtoDate;
+  rangeEnd: ProtoDate;
+  today: ProtoDate;
+  monthStart?: ProtoDate;
+  monthEnd?: ProtoDate;
+};
+
+export class StoreService {
+  private static client = createClient(StoreServiceRpc, transport);
+
+  static currentDate(tz: string): ProtoDate {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new globalThis.Date());
+    const y = parseInt(parts.find((p) => p.type === "year")?.value ?? "1970");
+    const mo = parseInt(parts.find((p) => p.type === "month")?.value ?? "1");
+    const d = parseInt(parts.find((p) => p.type === "day")?.value ?? "1");
+    const utcMs = globalThis.Date.UTC(y, mo - 1, d);
+    return new ProtoDate({ daysSinceEpoch: Math.floor(utcMs / 86_400_000) });
+  }
+
+  static currentTime(tz: string): LocalTime {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new globalThis.Date());
+    return new LocalTime({
+      hour: parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24,
+      minute: parseInt(parts.find((p) => p.type === "minute")?.value ?? "0"),
+      second: parseInt(parts.find((p) => p.type === "second")?.value ?? "0"),
+    });
+  }
+
+  static async getDay(date: ProtoDate) {
+    return this.client.getDay(date, { headers: AuthService.authHeaders() });
+  }
+
+  static async getDashboard(
+    rangeStart: ProtoDate,
+    rangeEnd: ProtoDate,
+    monthStart: ProtoDate,
+    monthEnd: ProtoDate,
+    today: ProtoDate,
+  ) {
+    return this.client.getDashboard(
+      new DashboardRequest({
+        rangeStart,
+        rangeEnd,
+        monthStart,
+        monthEnd,
+        today,
+      }),
+      { headers: AuthService.authHeaders() },
+    );
+  }
+
+  static async getDashboardRange({
+    rangeStart,
+    rangeEnd,
+    today,
+    monthStart = rangeStart,
+    monthEnd = rangeEnd,
+  }: DashboardRangeInput) {
+    return this.getDashboard(rangeStart, rangeEnd, monthStart, monthEnd, today);
+  }
+
+  static async setFlag(date: ProtoDate, flag: DayFlag) {
+    return this.client.setFlag(new SetFlagRequest({ date, flag }), {
+      headers: AuthService.authHeaders(),
+    });
+  }
+
+  static async setRequiredWorkHoursOverride(
+    date: ProtoDate,
+    requiredWorkHours?: Duration | null,
+  ) {
+    return this.client.setRequiredWorkHoursOverride(
+      new SetRequiredWorkHoursOverrideRequest({
+        date,
+        requiredWorkHours: requiredWorkHours ?? undefined,
+      }),
+      { headers: AuthService.authHeaders() },
+    );
+  }
+
+  static async addCheckIn(date: ProtoDate, time: LocalTime) {
+    return this.client.addCheckIn(new EventRequest({ date, time }), {
+      headers: AuthService.authHeaders(),
+    });
+  }
+
+  static async addCheckOut(date: ProtoDate, time: LocalTime) {
+    return this.client.addCheckOut(new EventRequest({ date, time }), {
+      headers: AuthService.authHeaders(),
+    });
+  }
+}

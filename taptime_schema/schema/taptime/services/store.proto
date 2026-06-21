@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+import public "google/protobuf/empty.proto";
+import public "google/protobuf/duration.proto";
+import public "taptime/balance.proto";
+import public "taptime/date.proto";
+import public "taptime/day.proto";
+import public "taptime/local_time.proto";
+import public "taptime/uuid.proto";
+
+package com.whs31.taptime.services;
+
+service StoreService {
+  rpc GetDay(Date) returns (Day);
+  rpc GetWorkHours(Date) returns (google.protobuf.Duration);
+  rpc GetBalance(Date) returns (Balance);
+  rpc GetDashboard(DashboardRequest) returns (DashboardResponse);
+  rpc SetFlag(SetFlagRequest) returns (google.protobuf.Empty);
+  rpc SetRequiredWorkHoursOverride(SetRequiredWorkHoursOverrideRequest) returns (google.protobuf.Empty);
+  rpc AddCheckIn(EventRequest) returns (google.protobuf.Empty);
+  rpc AddCheckOut(EventRequest) returns (google.protobuf.Empty);
+}
+
+message DashboardRequest {
+  Date range_start = 1;
+  Date range_end = 2;
+  Date month_start = 3;
+  Date month_end = 4;
+  Date today = 5;
+}
+
+message DashboardResponse {
+  repeated DaySummary days = 1;
+  MonthlyStats month_stats = 2;
+}
+
+message DaySummary {
+  Day day = 1;
+  google.protobuf.Duration clocked_work = 2;
+  Balance balance = 3;
+  bool skipped = 4;
+  bool full_day_worked = 5;
+  bool required_work_hours_overridden = 6;
+  google.protobuf.Duration work_target = 7;
+}
+
+message MonthlyStats {
+  google.protobuf.Duration total_clocked_work = 1;
+  google.protobuf.Duration overtime = 2;
+  google.protobuf.Duration undertime = 3;
+  uint32 worked_days = 4;
+  uint32 remote_days = 5;
+  uint32 day_offs = 6;
+  uint32 vacation_days = 7;
+  uint32 skipped_days = 8;
+  uint32 full_weekend_work_days = 9;
+  uint32 full_vacation_work_days = 10;
+}
+
+message SetFlagRequest {
+  Date date = 1;
+  DayFlag flag = 2;
+}
+
+message SetRequiredWorkHoursOverrideRequest {
+  Date date = 1;
+  google.protobuf.Duration required_work_hours = 2;
+}
+
+message EventRequest {
+  Date date = 1;
+  LocalTime time = 2;
+}
