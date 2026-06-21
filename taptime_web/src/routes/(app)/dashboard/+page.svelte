@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
+  import { WorkHoursInput } from "$lib/blocks/components";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { Progress } from "$lib/components/ui/progress/index.js";
   import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
@@ -11,41 +12,58 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import {
+    balanceContribution,
+    balanceLabel as sharedBalanceLabel,
+    buildMonthRhythmModel,
+    buildSessions,
+    buildSummaryMap,
+    chartX,
+    chartY,
+    computePresenceSeconds,
+    computeWorkSeconds,
+    currentTimeParts,
+    currentTimeValue,
+    dateLabel,
+    dayKey,
+    dayKindLabel,
+    durationSeconds,
+    formatHours,
+    formatSeconds,
+    formatTime,
+    hasFlag,
+    isRegularRequiredDay,
+    linePath,
+    liveBalanceSeconds as sharedLiveBalanceSeconds,
+    mondayFirstDayOfWeek,
+    monthEndDay,
+    monthLabel,
+    monthStartDay,
+    nextManualEventType,
+    pad,
+    parseManualTime,
+    protoDate,
+    requiredDaySeconds,
+    summaryClockedSeconds as sharedSummaryClockedSeconds,
+    workTargetSeconds,
+    type ManualEventType,
+  } from "$lib/dashboard";
   import { userStore } from "$lib/stores";
   import { StoreService } from "$lib/services";
+  import { Duration } from "@bufbuild/protobuf";
   import CalendarXIcon from "@lucide/svelte/icons/calendar-x";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import LogInIcon from "@lucide/svelte/icons/log-in";
   import LogOutIcon from "@lucide/svelte/icons/log-out";
-  import { DayFlag, type Day } from "@taptime/proto/taptime/day_pb.js";
-  import type { Balance } from "@taptime/proto/taptime/balance_pb.js";
-  import type { Event } from "@taptime/proto/taptime/event_pb.js";
-  import { Date as ProtoDate } from "@taptime/proto/taptime/date_pb.js";
-  import { LocalTime } from "@taptime/proto/taptime/local_time_pb.js";
+  import { DayFlag } from "@taptime/proto/taptime/day_pb.js";
   import type {
     DashboardResponse,
     DaySummary,
     MonthlyStats,
   } from "@taptime/proto/taptime/services/store_pb.js";
-  import type { Duration } from "@bufbuild/protobuf";
-
-  const MS_PER_DAY = 86_400_000;
-  const SECONDS_PER_DAY = 86_400;
 
   type CalendarCell = DaySummary | null;
-  type Session = {
-    checkIn: number | null;
-    checkOut: number | null;
-    duration: number | null;
-  };
-  type ChartPoint = {
-    day: number;
-    seconds: number;
-    kind: "checkIn" | "checkOut";
-    label: string;
-  };
   type ManualTarget = "today" | "selected";
-  type ManualEventType = "checkIn" | "checkOut";
 
   const tz = $derived(
     userStore.user?.timeZone?.timeZone ??
@@ -58,15 +76,20 @@
   let refreshing = $state(false);
   let submitting = $state(false);
   let flagUpdating = $state(false);
+  let overrideSaving = $state(false);
   let manualEventOpen = $state(false);
   let manualSubmitting = $state(false);
   let manualTarget = $state<ManualTarget>("today");
   let manualEventType = $state<ManualEventType>("checkIn");
   let manualTime = $state("");
+  let overrideHours = $state(0);
+  let overrideMinutes = $state(0);
+  let overrideLoadedKey = $state("");
   let loadedWindowKey = $state("");
   let selectedDayKey = $state<number | null>(null);
 
   let currentTimeDisplay = $state("--:--:--");
+  let currentSeconds = $state(0);
   let workSeconds = $state(0);
 
   const summaries = $derived(dashboard?.days ?? []);
@@ -91,10 +114,11 @@
       todayIsDayOff,
   );
   const takeDayOffLabel = $derived(todayIsDayOff ? "Day Off Set" : "Take Day Off");
-  const requiredSeconds = $derived(durationSeconds(day?.requiredWorkHours));
+  const requiredSeconds = $derived(requiredDaySeconds(day));
+  const presenceSeconds = $derived(computePresenceSeconds(day, currentSeconds));
   const progressPercent = $derived(
     requiredSeconds > 0
-      ? Math.min(100, (workSeconds / requiredSeconds) * 100)
+      ? Math.min(100, (presenceSeconds / requiredSeconds) * 100)
       : 0,
   );
   const monthStats = $derived(dashboard?.monthStats ?? null);
@@ -102,7 +126,7 @@
   const selectedSummary = $derived(
     selectedDayKey === null ? null : summaryByDay.get(selectedDayKey) ?? null,
   );
-  const todaySessions = $derived(buildSessions(day, workSeconds));
+  const todaySessions = $derived(buildSessions(day, currentSeconds));
   const monthSummaries = $derived(
     summaries.filter((summary) => {
       const key = dayKey(summary.day);
@@ -113,7 +137,7 @@
       );
     }),
   );
-  const chartModel = $derived(buildChartModel(monthSummaries, todayDays));
+  const chartModel = $derived(buildMonthRhythmModel(monthSummaries, todayDays));
   const selectedManualTargetAvailable = $derived(
     Boolean(
       selectedSummary?.day?.date &&
@@ -143,7 +167,7 @@
   );
   const parsedManualTime = $derived(parseManualTime(manualTime));
   const manualSubmitDisabled = $derived(
-      manualSubmitting ||
+    manualSubmitting ||
       submitting ||
       flagUpdating ||
       loading ||
@@ -151,6 +175,29 @@
       !manualTargetDate ||
       !parsedManualTime ||
       manualEventType !== validManualEventType,
+  );
+  const selectedWorkTargetSeconds = $derived(workTargetSeconds(selectedSummary));
+  const selectedLunchSeconds = $derived(
+    durationSeconds(selectedSummary?.day?.lunchBreakDuration),
+  );
+  const overrideSeconds = $derived(overrideHours * 3600 + overrideMinutes * 60);
+  const overrideDirty = $derived(
+    Boolean(selectedSummary?.day && overrideSeconds !== selectedWorkTargetSeconds),
+  );
+  const overrideSaveDisabled = $derived(
+    overrideSaving ||
+      flagUpdating ||
+      manualSubmitting ||
+      !selectedSummary?.day?.date ||
+      overrideSeconds <= 0 ||
+      !overrideDirty,
+  );
+  const overrideClearDisabled = $derived(
+    overrideSaving ||
+      flagUpdating ||
+      manualSubmitting ||
+      !selectedSummary?.day?.date ||
+      !selectedSummary.requiredWorkHoursOverridden,
   );
 
   const flagControls = [
@@ -186,67 +233,26 @@
     }
   });
 
+  $effect(() => {
+    const key = [
+      selectedSummary?.day?.date?.daysSinceEpoch ?? "none",
+      selectedWorkTargetSeconds,
+      selectedSummary?.requiredWorkHoursOverridden ? "override" : "default",
+    ].join(":");
+    if (key !== overrideLoadedKey) {
+      overrideLoadedKey = key;
+      overrideHours = Math.floor(selectedWorkTargetSeconds / 3600);
+      overrideMinutes = Math.floor((selectedWorkTargetSeconds % 3600) / 60);
+    }
+  });
+
   function dashboardWindow(timeZone: string) {
     const today = StoreService.currentDate(timeZone);
     const rangeEnd = today;
-    const rangeStart = new ProtoDate({
-      daysSinceEpoch: today.daysSinceEpoch - 364,
-    });
-    const monthStart = new ProtoDate({
-      daysSinceEpoch: monthStartDay(today.daysSinceEpoch),
-    });
-    const monthEnd = new ProtoDate({
-      daysSinceEpoch: monthEndDay(today.daysSinceEpoch),
-    });
+    const rangeStart = protoDate(today.daysSinceEpoch - 364);
+    const monthStart = protoDate(monthStartDay(today.daysSinceEpoch));
+    const monthEnd = protoDate(monthEndDay(today.daysSinceEpoch));
     return { rangeStart, rangeEnd, monthStart, monthEnd, today };
-  }
-
-  function buildSummaryMap(items: DaySummary[]) {
-    const map = new Map<number, DaySummary>();
-    for (const summary of items) {
-      const key = dayKey(summary.day);
-      if (key !== null) map.set(key, summary);
-    }
-    return map;
-  }
-
-  function dayKey(value?: Day): number | null {
-    return value?.date?.daysSinceEpoch ?? null;
-  }
-
-  function monthStartDay(daysSinceEpoch: number) {
-    const date = new Date(daysSinceEpoch * MS_PER_DAY);
-    return Math.floor(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / MS_PER_DAY,
-    );
-  }
-
-  function monthEndDay(daysSinceEpoch: number) {
-    const date = new Date(daysSinceEpoch * MS_PER_DAY);
-    return Math.floor(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0) / MS_PER_DAY,
-    );
-  }
-
-  function mondayFirstDayOfWeek(daysSinceEpoch: number) {
-    return (new Date(daysSinceEpoch * MS_PER_DAY).getUTCDay() + 6) % 7;
-  }
-
-  function dateLabel(daysSinceEpoch: number, compact = false) {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      weekday: compact ? undefined : "short",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(daysSinceEpoch * MS_PER_DAY));
-  }
-
-  function monthLabel(daysSinceEpoch: number) {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "long",
-      year: "numeric",
-    }).format(new Date(daysSinceEpoch * MS_PER_DAY));
   }
 
   function getTz(): string {
@@ -256,90 +262,8 @@
     );
   }
 
-  function tzTimeParts(timeZone: string): { h: number; m: number; s: number } {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date());
-    return {
-      h: parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24,
-      m: parseInt(parts.find((p) => p.type === "minute")?.value ?? "0"),
-      s: parseInt(parts.find((p) => p.type === "second")?.value ?? "0"),
-    };
-  }
-
-  function ltToSeconds(lt: { hour: number; minute: number; second: number }) {
-    return lt.hour * 3600 + lt.minute * 60 + lt.second;
-  }
-
-  function eventSeconds(event: Event): number | null {
-    if (
-      event.eventType.case !== "checkIn" &&
-      event.eventType.case !== "checkOut"
-    ) {
-      return null;
-    }
-    return ltToSeconds(event.eventType.value);
-  }
-
-  function pad(n: number) {
-    return String(n).padStart(2, "0");
-  }
-
-  function durationSeconds(duration?: Duration): number {
-    return Number(duration?.seconds ?? 0n);
-  }
-
   function summaryClockedSeconds(summary: DaySummary | null | undefined) {
-    if (!summary) return 0;
-    return dayKey(summary.day) === todayDays
-      ? workSeconds
-      : durationSeconds(summary.clockedWork);
-  }
-
-  function formatSeconds(secs: number) {
-    const sign = secs < 0 ? "-" : "";
-    const s = Math.max(0, Math.floor(Math.abs(secs)));
-    return `${sign}${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-  }
-
-  function formatHours(secs: number) {
-    const sign = secs < 0 ? "-" : "";
-    const abs = Math.abs(secs);
-    const hours = Math.floor(abs / 3600);
-    const minutes = Math.floor((abs % 3600) / 60);
-    if (hours === 0) return `${sign}${minutes}m`;
-    if (minutes === 0) return `${sign}${hours}h`;
-    return `${sign}${hours}h ${minutes}m`;
-  }
-
-  function formatTime(seconds: number | null) {
-    if (seconds === null) return "--:--";
-    return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor((seconds % 3600) / 60))}`;
-  }
-
-  function currentManualTimeValue() {
-    const { h, m } = tzTimeParts(getTz());
-    return `${pad(h)}:${pad(m)}`;
-  }
-
-  function parseManualTime(value: string): LocalTime | null {
-    const match = /^(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return null;
-    const hour = Number(match[1]);
-    const minute = Number(match[2]);
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-    return new LocalTime({ hour, minute, second: 0 });
-  }
-
-  function nextManualEventType(events: Event[]): ManualEventType {
-    return events.length > 0 &&
-      events[events.length - 1].eventType.case === "checkIn"
-      ? "checkOut"
-      : "checkIn";
+    return sharedSummaryClockedSeconds(summary, todayDays, workSeconds);
   }
 
   function manualEventTypeAllowed(type: ManualEventType) {
@@ -355,78 +279,14 @@
         : todaySummary
       )?.day?.events ?? [],
     );
-    manualTime = currentManualTimeValue();
-  }
-
-  function computeWorkSeconds(d: Day | null): number {
-    if (!d) return 0;
-
-    let total = 0;
-    let openCheckInSecs: number | null = null;
-
-    for (const event of d.events) {
-      if (event.eventType.case === "checkIn") {
-        openCheckInSecs = ltToSeconds(event.eventType.value);
-        continue;
-      }
-
-      if (event.eventType.case === "checkOut" && openCheckInSecs !== null) {
-        total += Math.max(
-          0,
-          ltToSeconds(event.eventType.value) - openCheckInSecs,
-        );
-        openCheckInSecs = null;
-      }
-    }
-
-    if (openCheckInSecs !== null) {
-      const { h, m, s } = tzTimeParts(getTz());
-      total += Math.max(0, h * 3600 + m * 60 + s - openCheckInSecs);
-    }
-
-    return total;
-  }
-
-  function buildSessions(d: Day | null, _liveTick: number): Session[] {
-    if (!d) return [];
-
-    const sessions: Session[] = [];
-    let openCheckIn: number | null = null;
-
-    for (const event of d.events) {
-      const seconds = eventSeconds(event);
-      if (seconds === null) continue;
-      if (event.eventType.case === "checkIn") {
-        openCheckIn = seconds;
-      } else if (openCheckIn !== null) {
-        sessions.push({
-          checkIn: openCheckIn,
-          checkOut: seconds,
-          duration: Math.max(0, seconds - openCheckIn),
-        });
-        openCheckIn = null;
-      } else {
-        sessions.push({ checkIn: null, checkOut: seconds, duration: null });
-      }
-    }
-
-    if (openCheckIn !== null) {
-      const { h, m, s } = tzTimeParts(getTz());
-      const now = h * 3600 + m * 60 + s;
-      sessions.push({
-        checkIn: openCheckIn,
-        checkOut: null,
-        duration: Math.max(0, now - openCheckIn),
-      });
-    }
-
-    return sessions;
+    manualTime = currentTimeValue(getTz());
   }
 
   function tick() {
-    const { h, m, s } = tzTimeParts(getTz());
+    const { h, m, s } = currentTimeParts(getTz());
+    currentSeconds = h * 3600 + m * 60 + s;
     currentTimeDisplay = `${pad(h)}:${pad(m)}:${pad(s)}`;
-    workSeconds = computeWorkSeconds(day);
+    workSeconds = computeWorkSeconds(day, currentSeconds);
   }
 
   async function loadDashboard(background = dashboard !== null) {
@@ -536,55 +396,45 @@
     }
   }
 
-  function hasFlag(summary: DaySummary | null | undefined, flag: DayFlag) {
-    return Boolean(summary?.day && (summary.day.flags & flag) === flag);
-  }
-
-  function serverBalanceSeconds(balance?: Balance): number {
-    switch (balance?.balanceType.case) {
-      case "overtime":
-        return durationSeconds(balance.balanceType.value);
-      case "underTime":
-        return -durationSeconds(balance.balanceType.value);
-      default:
-        return 0;
+  async function saveRequiredOverride() {
+    const selected = selectedSummary?.day;
+    if (overrideSaveDisabled || !selected?.date) return;
+    overrideSaving = true;
+    try {
+      await StoreService.setRequiredWorkHoursOverride(
+        selected.date,
+        new Duration({ seconds: BigInt(overrideSeconds) }),
+      );
+      selectedDayKey = selected.date.daysSinceEpoch;
+      await loadDashboard(true);
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      overrideSaving = false;
     }
   }
 
-  function isRegularRequiredDayValue(d: Day | null | undefined) {
-    if (!d) return false;
-    const nonRegularFlags =
-      DayFlag.WEEKEND | DayFlag.DAY_OFF | DayFlag.VACATION | DayFlag.REMOTE;
-    return (d.flags & nonRegularFlags) === 0;
+  async function clearRequiredOverride() {
+    const selected = selectedSummary?.day;
+    if (overrideClearDisabled || !selected?.date) return;
+    overrideSaving = true;
+    try {
+      await StoreService.setRequiredWorkHoursOverride(selected.date, null);
+      selectedDayKey = selected.date.daysSinceEpoch;
+      await loadDashboard(true);
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      overrideSaving = false;
+    }
   }
 
   function liveBalanceSeconds(summary: DaySummary | null | undefined) {
-    if (!summary?.day || !isRegularRequiredDayValue(summary.day)) {
-      return serverBalanceSeconds(summary?.balance);
-    }
-    return (
-      summaryClockedSeconds(summary) -
-      durationSeconds(summary.day.requiredWorkHours)
-    );
+    return sharedLiveBalanceSeconds(summary, todayDays, currentSeconds);
   }
 
   function balanceLabel(summary: DaySummary | null | undefined) {
-    if (!summary) return "No data";
-    if (summary.skipped) return "Skipped";
-    const delta = liveBalanceSeconds(summary);
-    if (delta > 0) return `Overtime ${formatHours(delta)}`;
-    if (delta < 0) return `Undertime ${formatHours(delta)}`;
-    return "Exact";
-  }
-
-  function dayKindLabel(summary: DaySummary | null | undefined) {
-    if (!summary?.day) return "No day";
-    const labels = [];
-    if (hasFlag(summary, DayFlag.WEEKEND)) labels.push("Weekend");
-    if (hasFlag(summary, DayFlag.REMOTE)) labels.push("Remote");
-    if (hasFlag(summary, DayFlag.DAY_OFF)) labels.push("Day off");
-    if (hasFlag(summary, DayFlag.VACATION)) labels.push("Vacation");
-    return labels.length > 0 ? labels.join(", ") : "Regular day";
+    return sharedBalanceLabel(summary, todayDays, workSeconds);
   }
 
   function activityTooltip(summary: DaySummary) {
@@ -643,7 +493,7 @@
     }
 
     const delta = liveBalanceSeconds(summary);
-    const required = Math.max(1, durationSeconds(summary.day.requiredWorkHours));
+    const required = Math.max(1, requiredDaySeconds(summary.day));
     if (delta < 0) {
       const amount = Math.min(1, Math.abs(delta) / required);
       return activityCell(themeMix("--destructive", 30 + amount * 36));
@@ -668,14 +518,6 @@
     return dots;
   }
 
-  function balanceContribution(clocked: number, required: number) {
-    const delta = clocked - required;
-    return {
-      overtime: Math.max(0, delta),
-      undertime: Math.max(0, -delta),
-    };
-  }
-
   function buildStatItems(
     stats: MonthlyStats | null,
     today: DaySummary | null,
@@ -687,10 +529,13 @@
     let overtime = durationSeconds(stats?.overtime);
     let undertime = durationSeconds(stats?.undertime);
 
-    if (today?.day && isRegularRequiredDayValue(today.day)) {
-      const required = durationSeconds(today.day.requiredWorkHours);
-      const closed = balanceContribution(closedToday, required);
-      const live = balanceContribution(liveToday, required);
+    if (today?.day && isRegularRequiredDay(today.day)) {
+      const required = requiredDaySeconds(today.day);
+      const closed = balanceContribution(computePresenceSeconds(today.day), required);
+      const live = balanceContribution(
+        computePresenceSeconds(today.day, currentSeconds),
+        required,
+      );
       overtime += live.overtime - closed.overtime;
       undertime += live.undertime - closed.undertime;
     }
@@ -719,65 +564,6 @@
         value: String(stats?.fullVacationWorkDays ?? 0),
       },
     ];
-  }
-
-  function buildChartModel(items: DaySummary[], currentDay: number) {
-    const monthStart = monthStartDay(currentDay);
-    const monthEnd = monthEndDay(currentDay);
-    const daysInMonth = monthEnd - monthStart + 1;
-    const firstLine: ChartPoint[] = [];
-    const lastLine: ChartPoint[] = [];
-    const points: ChartPoint[] = [];
-
-    for (const summary of items) {
-      const key = dayKey(summary.day);
-      if (key === null || !summary.day) continue;
-      const dayNumber = key - monthStart + 1;
-      const dayEvents = summary.day.events
-        .map((event) => {
-          const seconds = eventSeconds(event);
-          if (seconds === null) return null;
-          return {
-            day: dayNumber,
-            seconds,
-            kind: event.eventType.case as "checkIn" | "checkOut",
-            label: `${dateLabel(key, true)} ${event.eventType.case === "checkIn" ? "in" : "out"} ${formatTime(seconds)}`,
-          };
-        })
-        .filter((event): event is ChartPoint => event !== null);
-
-      const firstIn = dayEvents.find((event) => event.kind === "checkIn");
-      const lastOut = [...dayEvents]
-        .reverse()
-        .find((event) => event.kind === "checkOut");
-      if (firstIn) firstLine.push(firstIn);
-      if (lastOut) lastLine.push(lastOut);
-      points.push(...dayEvents);
-    }
-
-    return { monthStart, monthEnd, daysInMonth, firstLine, lastLine, points };
-  }
-
-  function chartX(dayNumber: number, daysInMonth: number) {
-    const left = 46;
-    const width = 626;
-    if (daysInMonth <= 1) return left;
-    return left + ((dayNumber - 1) / (daysInMonth - 1)) * width;
-  }
-
-  function chartY(seconds: number) {
-    const top = 16;
-    const height = 184;
-    return top + (1 - seconds / SECONDS_PER_DAY) * height;
-  }
-
-  function linePath(points: ChartPoint[], daysInMonth: number) {
-    return points
-      .map(
-        (point, index) =>
-          `${index === 0 ? "M" : "L"} ${chartX(point.day, daysInMonth).toFixed(2)} ${chartY(point.seconds).toFixed(2)}`,
-      )
-      .join(" ");
   }
 
   function selectedHasFlag(flag: DayFlag) {
@@ -845,7 +631,7 @@
           <div class="flex flex-col gap-2">
             <Progress value={progressPercent} max={100} class="h-1.5" />
             <div class="flex justify-between text-xs tabular-nums text-muted-foreground">
-              <span>{formatSeconds(workSeconds)}</span>
+              <span>{formatSeconds(presenceSeconds)}</span>
               <span>{formatSeconds(requiredSeconds)}</span>
             </div>
           </div>
@@ -1071,8 +857,46 @@
           <div>
             <div class="text-muted-foreground text-xs uppercase">Required</div>
             <div class="font-mono">
-              {formatSeconds(durationSeconds(selectedSummary?.day?.requiredWorkHours))}
+              {formatSeconds(requiredDaySeconds(selectedSummary?.day))}
             </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div class="flex flex-col gap-3">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium">Required Work Override</div>
+              <div class="text-muted-foreground text-xs">
+                {formatHours(overrideSeconds)} work + {formatHours(selectedLunchSeconds)} lunch = {formatHours(overrideSeconds + selectedLunchSeconds)} target
+              </div>
+            </div>
+            {#if selectedSummary?.requiredWorkHoursOverridden}
+              <span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                Override
+              </span>
+            {/if}
+          </div>
+          <WorkHoursInput bind:hours={overrideHours} bind:minutes={overrideMinutes} />
+          <div class="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onclick={clearRequiredOverride}
+              disabled={overrideClearDisabled}
+            >
+              Clear
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onclick={saveRequiredOverride}
+              disabled={overrideSaveDisabled}
+            >
+              {overrideSaving ? "Saving..." : "Save Target"}
+            </Button>
           </div>
         </div>
 

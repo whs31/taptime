@@ -7,7 +7,7 @@ import { Date } from "../date_pb.js";
 import { Day } from "../day_pb.js";
 import { Duration, Empty, MethodKind } from "@bufbuild/protobuf";
 import { Balance } from "../balance_pb.js";
-import { DashboardRequest, DashboardResponse, EventRequest, SetFlagRequest } from "./store_pb.js";
+import { DashboardRequest, DashboardResponse, EventRequest, SetFlagRequest, SetRequiredWorkHoursOverrideRequest } from "./store_pb.js";
 
 /**
  * @generated from service com.whs31.taptime.services.StoreService
@@ -57,6 +57,15 @@ export const StoreService = {
     setFlag: {
       name: "SetFlag",
       I: SetFlagRequest,
+      O: Empty,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc com.whs31.taptime.services.StoreService.SetRequiredWorkHoursOverride
+     */
+    setRequiredWorkHoursOverride: {
+      name: "SetRequiredWorkHoursOverride",
+      I: SetRequiredWorkHoursOverrideRequest,
       O: Empty,
       kind: MethodKind.Unary,
     },

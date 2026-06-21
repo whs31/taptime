@@ -10,6 +10,7 @@
     WeekdaySelect,
     WorkHoursInput,
   } from "$lib/blocks/components";
+  import { weekdayKey, weekdayLabel } from "$lib/account";
   import { durationSeconds, formatHours } from "$lib/dashboard";
   import { AuthService } from "$lib/services";
   import { userStore } from "$lib/stores";
@@ -21,17 +22,6 @@
   import ClockIcon from "@lucide/svelte/icons/clock";
 
   const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const DAY_LABELS: Record<Weekday, string> = {
-    [Weekday.MONDAY]: "Mon",
-    [Weekday.TUESDAY]: "Tue",
-    [Weekday.WEDNESDAY]: "Wed",
-    [Weekday.THURSDAY]: "Thu",
-    [Weekday.FRIDAY]: "Fri",
-    [Weekday.SATURDAY]: "Sat",
-    [Weekday.SUNDAY]: "Sun",
-    [Weekday.UNSPECIFIED]: "",
-  };
-
   let loadedSettingsKey = $state("");
   let timezone = $state(LOCAL_TZ);
   let workHours = $state(8);
@@ -81,20 +71,6 @@
       remoteDays = [...user.settings.remoteDays];
     }
   });
-
-  function weekdayKey(days: Weekday[] | undefined) {
-    return [...(days ?? [])].sort((a, b) => a - b).join(",");
-  }
-
-  function weekdayLabel(days: Weekday[]) {
-    return days.length > 0
-      ? [...days]
-          .sort((a, b) => a - b)
-          .map((day) => DAY_LABELS[day])
-          .filter(Boolean)
-          .join(", ")
-      : "None";
-  }
 
   async function saveSettings() {
     if (saveDisabled) return;
@@ -207,6 +183,10 @@
           <div>
             <div class="text-muted-foreground text-xs uppercase">Lunch Break</div>
             <div class="font-mono">{formatHours(lunchSeconds)}</div>
+          </div>
+          <div>
+            <div class="text-muted-foreground text-xs uppercase">Required Day Target</div>
+            <div class="font-mono">{formatHours(workSeconds + lunchSeconds)}</div>
           </div>
           <div>
             <div class="text-muted-foreground text-xs uppercase">Weekends</div>

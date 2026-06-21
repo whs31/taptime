@@ -17,6 +17,12 @@ use uuid::Uuid;
 
 use super::db::{CredRow, fetch_core_user, weekday_to_iso};
 
+struct ProfileInput {
+  name: String,
+  email: String,
+  organization: Option<String>,
+}
+
 pub struct AuthServiceImpl {
   db: sqlx::PgPool,
   jwt_secret: String,
@@ -88,6 +94,61 @@ fn clean_optional_text(value: Option<String>) -> Option<String> {
     .filter(|value| !value.is_empty())
 }
 
+fn normalize_profile(
+  name: String,
+  email: String,
+  organization: Option<String>,
+) -> Result<ProfileInput, Status> {
+  let name = name.trim().to_string();
+  let email = email.trim().to_string();
+  let organization = clean_optional_text(organization);
+
+  if name.is_empty() || email.is_empty() {
+    return Err(Status::invalid_argument("Name and email are required"));
+  }
+  if !is_valid_email(&email) {
+    return Err(Status::invalid_argument("Email is invalid"));
+  }
+
+  Ok(ProfileInput {
+    name,
+    email,
+    organization,
+  })
+}
+
+fn hash_password(password: &str) -> Result<String, Status> {
+  if password.is_empty() {
+    return Err(Status::invalid_argument("Password cannot be empty"));
+  }
+
+  let salt = SaltString::generate(&mut OsRng);
+  Argon2::default()
+    .hash_password(password.as_bytes(), &salt)
+    .map_err(|e| Status::internal(format!("Hashing failed: {e}")))
+    .map(|hash| hash.to_string())
+}
+
+fn is_valid_email(email: &str) -> bool {
+  if email.chars().any(char::is_whitespace) {
+    return false;
+  }
+
+  let Some((local, domain)) = email.split_once('@') else {
+    return false;
+  };
+  !local.is_empty()
+    && !domain.is_empty()
+    && !domain.contains('@')
+    && domain.contains('.')
+    && !domain.starts_with('.')
+    && !domain.ends_with('.')
+}
+
+fn weekdays_to_iso(days: &[chrono::Weekday]) -> Vec<i32> {
+  days.iter().copied().map(weekday_to_iso).collect()
+}
+
 fn uid_bytes_from_proto(uid: Option<ProtoUid>) -> Result<Option<Vec<u8>>, Status> {
   uid
     .map(|uid| {
@@ -130,13 +191,7 @@ impl AuthService for AuthServiceImpl {
     let proto_user = req
       .user
       .ok_or_else(|| Status::invalid_argument("Missing user"))?;
-
-    if req.password.is_empty() {
-      return Err(Status::invalid_argument("Password cannot be empty"));
-    }
-    if proto_user.name.is_empty() || proto_user.email.is_empty() {
-      return Err(Status::invalid_argument("Name and email are required"));
-    }
+    let profile = normalize_profile(proto_user.name, proto_user.email, proto_user.organization)?;
 
     let time_zone: chrono_tz::Tz = proto_user
       .time_zone
@@ -153,7 +208,7 @@ impl AuthService for AuthServiceImpl {
       .unwrap_or_default();
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
-      .bind(&proto_user.email)
+      .bind(&profile.email)
       .fetch_one(&self.db)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
@@ -161,32 +216,24 @@ impl AuthService for AuthServiceImpl {
       return Err(Status::already_exists("Email already registered"));
     }
 
-    let salt = SaltString::generate(&mut OsRng);
-    let password_hash = Argon2::default()
-      .hash_password(req.password.as_bytes(), &salt)
-      .map_err(|e| Status::internal(format!("Hashing failed: {e}")))?
-      .to_string();
+    let password_hash = hash_password(&req.password)?;
 
     let user_id = Uuid::new_v4();
     let now = chrono::Utc::now();
-    let weekends: Vec<i32> = settings
-      .weekends
-      .iter()
-      .copied()
-      .map(weekday_to_iso)
-      .collect();
-    let remote_days: Vec<i32> = settings
-      .remote_days
-      .iter()
-      .copied()
-      .map(weekday_to_iso)
-      .collect();
+    let weekends = weekdays_to_iso(&settings.weekends);
+    let remote_days = weekdays_to_iso(&settings.remote_days);
+
+    let mut tx = self
+      .db
+      .begin()
+      .await
+      .map_err(|e| Status::internal(e.to_string()))?;
 
     sqlx::query(include_str!("queries/create_user.sql"))
       .bind(user_id)
-      .bind(&proto_user.name)
-      .bind(&proto_user.email)
-      .bind(&proto_user.organization)
+      .bind(&profile.name)
+      .bind(&profile.email)
+      .bind(&profile.organization)
       .bind(time_zone.name())
       .bind(now)
       .bind(now)
@@ -195,19 +242,22 @@ impl AuthService for AuthServiceImpl {
       .bind(settings.lunch_break_duration.num_seconds())
       .bind(&weekends)
       .bind(&remote_days)
-      .execute(&self.db)
+      .execute(&mut *tx)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
 
     sqlx::query(include_str!("queries/write_user_credentials.sql"))
       .bind(user_id)
-      .bind(&proto_user.email)
+      .bind(&profile.email)
       .bind(&password_hash)
-      .execute(&self.db)
+      .execute(&mut *tx)
+      .await
+      .map_err(|e| Status::internal(e.to_string()))?;
+    tx.commit()
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
 
-    tracing::info!(user_id = %user_id, email = %proto_user.email, "user registered");
+    tracing::info!(user_id = %user_id, email = %profile.email, "user registered");
 
     let user = self.fetch_user(user_id).await?;
     let jwt = self.make_jwt(user_id)?;
@@ -222,9 +272,10 @@ impl AuthService for AuthServiceImpl {
     request: Request<LoginRequest>,
   ) -> Result<Response<AuthResponse>, Status> {
     let req = request.into_inner();
+    let email = req.email.trim().to_string();
 
     let cred = sqlx::query_as::<_, CredRow>(include_str!("queries/fetch_user_credentials.sql"))
-      .bind(&req.email)
+      .bind(&email)
       .fetch_optional(&self.db)
       .await
       .map_err(|e| Status::internal(e.to_string()))?
@@ -238,7 +289,7 @@ impl AuthService for AuthServiceImpl {
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
 
-    tracing::info!(user_id = %cred.user_id, email = %req.email, "user logged in");
+    tracing::info!(user_id = %cred.user_id, email = %email, "user logged in");
 
     let user = self.fetch_user(cred.user_id).await?;
     let jwt = self.make_jwt(cred.user_id)?;
@@ -261,17 +312,11 @@ impl AuthService for AuthServiceImpl {
   ) -> Result<Response<User>, Status> {
     let user_id = self.authenticated_user_id(&request)?;
     let req = request.into_inner();
-    let name = req.name.trim().to_string();
-    let email = req.email.trim().to_string();
-    let organization = clean_optional_text(req.organization);
-
-    if name.is_empty() || email.is_empty() {
-      return Err(Status::invalid_argument("Name and email are required"));
-    }
+    let profile = normalize_profile(req.name, req.email, req.organization)?;
 
     let email_exists: bool =
       sqlx::query_scalar(include_str!("queries/email_exists_for_other_user.sql"))
-        .bind(&email)
+        .bind(&profile.email)
         .bind(user_id)
         .fetch_one(&self.db)
         .await
@@ -287,15 +332,15 @@ impl AuthService for AuthServiceImpl {
       .map_err(|e| Status::internal(e.to_string()))?;
     sqlx::query(include_str!("queries/update_user_profile.sql"))
       .bind(user_id)
-      .bind(&name)
-      .bind(&email)
-      .bind(&organization)
+      .bind(&profile.name)
+      .bind(&profile.email)
+      .bind(&profile.organization)
       .execute(&mut *tx)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
     sqlx::query(include_str!("queries/update_user_credentials_email.sql"))
       .bind(user_id)
-      .bind(&email)
+      .bind(&profile.email)
       .execute(&mut *tx)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
@@ -314,18 +359,8 @@ impl AuthService for AuthServiceImpl {
     let user_id = self.authenticated_user_id(&request)?;
     let req = request.into_inner();
     let (time_zone, settings) = settings_from_update_request(&req)?;
-    let weekends: Vec<i32> = settings
-      .weekends
-      .iter()
-      .copied()
-      .map(weekday_to_iso)
-      .collect();
-    let remote_days: Vec<i32> = settings
-      .remote_days
-      .iter()
-      .copied()
-      .map(weekday_to_iso)
-      .collect();
+    let weekends = weekdays_to_iso(&settings.weekends);
+    let remote_days = weekdays_to_iso(&settings.remote_days);
 
     sqlx::query(include_str!("queries/update_user_settings.sql"))
       .bind(user_id)
@@ -377,6 +412,13 @@ impl AuthService for AuthServiceImpl {
       .execute(&mut *tx)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
+    sqlx::query(include_str!(
+      "queries/delete_day_required_work_overrides.sql"
+    ))
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
     tx.commit()
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
@@ -415,6 +457,24 @@ mod tests {
     );
     assert_eq!(clean_optional_text(Some("   ".into())), None);
     assert_eq!(clean_optional_text(None), None);
+  }
+
+  #[test]
+  fn normalize_profile_trims_fields_and_requires_valid_identity() {
+    let profile = normalize_profile(
+      "  Jane  ".into(),
+      "  jane@example.com  ".into(),
+      Some("  Acme  ".into()),
+    )
+    .unwrap();
+    assert_eq!(profile.name, "Jane");
+    assert_eq!(profile.email, "jane@example.com");
+    assert_eq!(profile.organization, Some("Acme".into()));
+
+    assert!(normalize_profile("".into(), "jane@example.com".into(), None).is_err());
+    assert!(normalize_profile("Jane".into(), "not-email".into(), None).is_err());
+    assert!(normalize_profile("Jane".into(), "jane@localhost".into(), None).is_err());
+    assert!(normalize_profile("Jane".into(), "jane @example.com".into(), None).is_err());
   }
 
   #[test]

@@ -7,6 +7,13 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import {
+    DELETE_PROFILE_CONFIRMATION,
+    DELETE_TIME_DATA_CONFIRMATION,
+    formatUid,
+    parseUid,
+    timestampLabel,
+  } from "$lib/account";
   import { AuthService } from "$lib/services";
   import { userStore } from "$lib/stores";
   import { Uid } from "@taptime/proto/taptime/uid_pb.js";
@@ -55,11 +62,11 @@
   const uidSaveDisabled = $derived(savingUid || !parsedUid || !uidDirty);
   const clearUidDisabled = $derived(savingUid || !existingUidLabel);
   const deleteDataDisabled = $derived(
-    deletingData || deleteDataConfirm !== "DELETE DATA",
+    deletingData || deleteDataConfirm !== DELETE_TIME_DATA_CONFIRMATION,
   );
   const deleteProfileDisabled = $derived(
     deletingProfile ||
-      deleteProfileConfirm !== "DELETE PROFILE" ||
+      deleteProfileConfirm !== DELETE_PROFILE_CONFIRMATION ||
       deleteProfilePassword.length === 0,
   );
 
@@ -79,33 +86,6 @@
       uidInput = existingUidLabel;
     }
   });
-
-  function formatUid(bytes?: Uint8Array) {
-    if (!bytes || bytes.length === 0) return "";
-    return [...bytes].map((byte) => byte.toString(16).padStart(2, "0").toUpperCase()).join(" ");
-  }
-
-  function parseUid(value: string): { bytes: Uint8Array; label: string } | null {
-    const cleaned = value.replace(/[\s:;.,-]/g, "").toUpperCase();
-    if (cleaned.length === 0) return null;
-    if (![8, 14, 20].includes(cleaned.length)) return null;
-    if (!/^[0-9A-F]+$/.test(cleaned)) return null;
-
-    const bytes = new Uint8Array(cleaned.length / 2);
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Number.parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
-    }
-    return { bytes, label: formatUid(bytes) };
-  }
-
-  function timestampLabel(value?: { seconds: bigint; nanos: number }) {
-    if (!value) return "Never";
-    const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(ms));
-  }
 
   async function saveProfile() {
     if (profileSaveDisabled) return;
@@ -356,7 +336,7 @@
                 <Dialog.Header>
                   <Dialog.Title>Delete all time data?</Dialog.Title>
                   <Dialog.Description>
-                    This removes events and day flags. Type DELETE DATA to continue.
+                    This removes events and day flags. Type {DELETE_TIME_DATA_CONFIRMATION} to continue.
                   </Dialog.Description>
                 </Dialog.Header>
                 <div class="grid gap-2">
@@ -364,7 +344,7 @@
                   <Input
                     id="delete-data-confirm"
                     bind:value={deleteDataConfirm}
-                    placeholder="DELETE DATA"
+                    placeholder={DELETE_TIME_DATA_CONFIRMATION}
                   />
                 </div>
                 <Dialog.Footer>
@@ -396,7 +376,7 @@
                 <Dialog.Header>
                   <Dialog.Title>Delete profile?</Dialog.Title>
                   <Dialog.Description>
-                    Enter your password and type DELETE PROFILE to permanently delete the account.
+                    Enter your password and type {DELETE_PROFILE_CONFIRMATION} to permanently delete the account.
                   </Dialog.Description>
                 </Dialog.Header>
                 <div class="grid gap-3">
@@ -414,7 +394,7 @@
                     <Input
                       id="delete-profile-confirm"
                       bind:value={deleteProfileConfirm}
-                      placeholder="DELETE PROFILE"
+                      placeholder={DELETE_PROFILE_CONFIRMATION}
                     />
                   </div>
                 </div>

@@ -115,7 +115,6 @@
     try {
       const today = todayDate(tz);
       dashboard = await StoreService.getDashboardRange({
-        name: preset,
         rangeStart: protoDate(range.start),
         rangeEnd: protoDate(range.end),
         monthStart: protoDate(range.start),

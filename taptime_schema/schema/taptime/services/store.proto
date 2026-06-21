@@ -16,6 +16,7 @@ service StoreService {
   rpc GetBalance(Date) returns (Balance);
   rpc GetDashboard(DashboardRequest) returns (DashboardResponse);
   rpc SetFlag(SetFlagRequest) returns (google.protobuf.Empty);
+  rpc SetRequiredWorkHoursOverride(SetRequiredWorkHoursOverrideRequest) returns (google.protobuf.Empty);
   rpc AddCheckIn(EventRequest) returns (google.protobuf.Empty);
   rpc AddCheckOut(EventRequest) returns (google.protobuf.Empty);
 }
@@ -39,6 +40,8 @@ message DaySummary {
   Balance balance = 3;
   bool skipped = 4;
   bool full_day_worked = 5;
+  bool required_work_hours_overridden = 6;
+  google.protobuf.Duration work_target = 7;
 }
 
 message MonthlyStats {
@@ -57,6 +60,11 @@ message MonthlyStats {
 message SetFlagRequest {
   Date date = 1;
   DayFlag flag = 2;
+}
+
+message SetRequiredWorkHoursOverrideRequest {
+  Date date = 1;
+  google.protobuf.Duration required_work_hours = 2;
 }
 
 message EventRequest {

@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
+  import { WorkHoursInput } from "$lib/blocks/components";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
@@ -33,12 +34,15 @@
     parseManualTime,
     protoDate,
     rangeLabel,
+    requiredDaySeconds,
     summaryClockedSeconds,
     todayDate,
+    workTargetSeconds,
     type ManualEventType,
   } from "$lib/dashboard";
   import { StoreService } from "$lib/services";
   import { userStore } from "$lib/stores";
+  import { Duration } from "@bufbuild/protobuf";
   import CalendarPlusIcon from "@lucide/svelte/icons/calendar-plus";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
@@ -78,10 +82,14 @@
   let selectedDayKey = $state<number | null>(null);
   let loadedKey = $state("");
   let flagUpdating = $state(false);
+  let overrideSaving = $state(false);
   let manualOpen = $state(false);
   let manualSubmitting = $state(false);
   let manualEventType = $state<ManualEventType>("checkIn");
   let manualTime = $state("");
+  let overrideHours = $state(0);
+  let overrideMinutes = $state(0);
+  let overrideLoadedKey = $state("");
 
   const todayDays = $derived(StoreService.currentDate(tz).daysSinceEpoch);
   const range = $derived(historyRange(preset, todayDays));
@@ -104,6 +112,29 @@
       !parsedManualTime ||
       manualEventType !== validManualEventType,
   );
+  const selectedWorkTargetSeconds = $derived(workTargetSeconds(selectedSummary));
+  const selectedLunchSeconds = $derived(
+    durationSeconds(selectedSummary?.day?.lunchBreakDuration),
+  );
+  const overrideSeconds = $derived(overrideHours * 3600 + overrideMinutes * 60);
+  const overrideDirty = $derived(
+    Boolean(selectedSummary?.day && overrideSeconds !== selectedWorkTargetSeconds),
+  );
+  const overrideSaveDisabled = $derived(
+    overrideSaving ||
+      flagUpdating ||
+      manualSubmitting ||
+      !selectedSummary?.day?.date ||
+      overrideSeconds <= 0 ||
+      !overrideDirty,
+  );
+  const overrideClearDisabled = $derived(
+    overrideSaving ||
+      flagUpdating ||
+      manualSubmitting ||
+      !selectedSummary?.day?.date ||
+      !selectedSummary.requiredWorkHoursOverridden,
+  );
 
   $effect(() => {
     const key = `${tz}:${preset}:${range.start}:${range.end}`;
@@ -116,6 +147,19 @@
   $effect(() => {
     if (manualEventType !== validManualEventType) {
       manualEventType = validManualEventType;
+    }
+  });
+
+  $effect(() => {
+    const key = [
+      selectedSummary?.day?.date?.daysSinceEpoch ?? "none",
+      selectedWorkTargetSeconds,
+      selectedSummary?.requiredWorkHoursOverridden ? "override" : "default",
+    ].join(":");
+    if (key !== overrideLoadedKey) {
+      overrideLoadedKey = key;
+      overrideHours = Math.floor(selectedWorkTargetSeconds / 3600);
+      overrideMinutes = Math.floor((selectedWorkTargetSeconds % 3600) / 60);
     }
   });
 
@@ -143,7 +187,6 @@
     try {
       const today = todayDate(tz);
       const next = await StoreService.getDashboardRange({
-        name: preset,
         rangeStart: protoDate(range.start),
         rangeEnd: protoDate(range.end),
         monthStart: protoDate(monthStartDay(range.end)),
@@ -248,6 +291,39 @@
       loadError = e instanceof Error ? e.message : String(e);
     } finally {
       flagUpdating = false;
+    }
+  }
+
+  async function saveRequiredOverride() {
+    const date = selectedSummary?.day?.date;
+    if (overrideSaveDisabled || !date) return;
+    overrideSaving = true;
+    try {
+      await StoreService.setRequiredWorkHoursOverride(
+        date,
+        new Duration({ seconds: BigInt(overrideSeconds) }),
+      );
+      selectedDayKey = date.daysSinceEpoch;
+      await loadHistory(true);
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      overrideSaving = false;
+    }
+  }
+
+  async function clearRequiredOverride() {
+    const date = selectedSummary?.day?.date;
+    if (overrideClearDisabled || !date) return;
+    overrideSaving = true;
+    try {
+      await StoreService.setRequiredWorkHoursOverride(date, null);
+      selectedDayKey = date.daysSinceEpoch;
+      await loadHistory(true);
+    } catch (e) {
+      loadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      overrideSaving = false;
     }
   }
 
@@ -408,7 +484,7 @@
                     <Table.Cell class="font-mono tabular-nums">{formatTime(firstCheckIn(summary))}</Table.Cell>
                     <Table.Cell class="font-mono tabular-nums">{formatTime(lastCheckOut(summary))}</Table.Cell>
                     <Table.Cell class="font-mono tabular-nums">{formatHours(summaryClockedSeconds(summary))}</Table.Cell>
-                    <Table.Cell class="font-mono tabular-nums">{formatHours(durationSeconds(summary.day?.requiredWorkHours))}</Table.Cell>
+                    <Table.Cell class="font-mono tabular-nums">{formatHours(requiredDaySeconds(summary.day))}</Table.Cell>
                     <Table.Cell>{balanceLabel(summary)}</Table.Cell>
                     <Table.Cell class="text-right font-mono tabular-nums">{buildSessions(summary.day).length}</Table.Cell>
                   </Table.Row>
@@ -447,6 +523,44 @@
             <div>
               <div class="text-muted-foreground text-xs uppercase">Last out</div>
               <div class="font-mono">{formatTime(lastCheckOut(selectedSummary))}</div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div class="flex flex-col gap-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-sm font-medium">Required Work Override</div>
+                <div class="text-muted-foreground text-xs">
+                  {formatHours(overrideSeconds)} work + {formatHours(selectedLunchSeconds)} lunch = {formatHours(overrideSeconds + selectedLunchSeconds)} target
+                </div>
+              </div>
+              {#if selectedSummary.requiredWorkHoursOverridden}
+                <span class="rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                  Override
+                </span>
+              {/if}
+            </div>
+            <WorkHoursInput bind:hours={overrideHours} bind:minutes={overrideMinutes} />
+            <div class="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onclick={clearRequiredOverride}
+                disabled={overrideClearDisabled}
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onclick={saveRequiredOverride}
+                disabled={overrideSaveDisabled}
+              >
+                {overrideSaving ? "Saving..." : "Save Target"}
+              </Button>
             </div>
           </div>
 

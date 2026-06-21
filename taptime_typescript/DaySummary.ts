@@ -9,4 +9,6 @@ export type DaySummary = {
   balance: Balance | null;
   skipped: boolean;
   fullDayWorked: boolean;
+  requiredWorkHoursOverridden: boolean;
+  workTarget: Duration | null;
 };

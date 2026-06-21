@@ -129,6 +129,14 @@ impl Day {
         .unwrap_or(false)
   }
 
+  pub fn required_day_duration(&self) -> chrono::Duration {
+    if self.required_work_hours <= chrono::Duration::zero() {
+      chrono::Duration::zero()
+    } else {
+      self.required_work_hours + self.lunch_break_duration
+    }
+  }
+
   pub fn add_event(&mut self, event: Event) -> Result<()> {
     match event {
       Event::CheckIn(time) => self.add_check_in(time),
@@ -170,9 +178,7 @@ impl Day {
   /// If the day is a remote work day, returns the required work hours.
   /// If the day is a regular work day, returns the regular work hours.
   ///
-  /// Work hours are calculated by taking the difference between the **first** check-in and
-  /// **last** check-out, subtracting the lunch break duration (taken from the user's settings)
-  /// if applicable.
+  /// Work hours are calculated by summing each completed check-in/check-out interval.
   pub fn work_hours(&self) -> Result<Option<chrono::Duration>> {
     if self.is_day_off() || self.is_weekend() || self.is_vacation() {
       return Ok(None);
@@ -201,9 +207,16 @@ impl Day {
 
   #[inline]
   pub fn balance(&self) -> Result<Balance> {
+    if self.is_day_off() || self.is_weekend() || self.is_vacation() || self.is_remote() {
+      return Ok(Balance::Exact);
+    }
+    if self.events.last().map(|e| e.is_check_in()).unwrap_or(false) {
+      return Err(Error::CheckOutNotFound);
+    }
+
     Ok(Balance::calculate(
-      self.work_hours()?.unwrap_or(chrono::Duration::zero()),
-      self.required_work_hours(),
+      self.presence_duration().unwrap_or(chrono::Duration::zero()),
+      self.required_day_duration(),
     ))
   }
 }
@@ -494,7 +507,7 @@ mod tests {
     day.add_check_out(lt(17, 0)).unwrap();
     assert_eq!(
       day.balance().unwrap(),
-      Balance::Overtime(chrono::Duration::hours(1))
+      Balance::Overtime(chrono::Duration::minutes(30))
     );
   }
 
@@ -505,7 +518,7 @@ mod tests {
     day.add_check_out(lt(16, 0)).unwrap();
     assert_eq!(
       day.balance().unwrap(),
-      Balance::UnderTime(chrono::Duration::hours(1))
+      Balance::UnderTime(chrono::Duration::minutes(90))
     );
   }
 
@@ -513,7 +526,44 @@ mod tests {
   fn balance_exact() {
     let mut day = make_user().new_day(date(2024, 1, 1));
     day.add_check_in(lt(8, 0)).unwrap();
-    day.add_check_out(lt(16, 0)).unwrap();
+    day.add_check_out(lt(16, 30)).unwrap();
+    assert_eq!(day.balance().unwrap(), Balance::Exact);
+  }
+
+  #[test]
+  fn required_day_duration_includes_lunch() {
+    let day = make_user().new_day(date(2024, 1, 1));
+    assert_eq!(
+      day.required_day_duration(),
+      chrono::Duration::hours(8) + chrono::Duration::minutes(30)
+    );
+  }
+
+  #[test]
+  fn balance_uses_presence_not_clocked_work() {
+    let mut day = make_user().new_day(date(2024, 1, 1));
+    day.add_check_in(lt(8, 0)).unwrap();
+    day.add_check_out(lt(12, 0)).unwrap();
+    day.add_check_in(lt(13, 0)).unwrap();
+    day.add_check_out(lt(16, 30)).unwrap();
+    assert_eq!(day.clocked_work_duration(), chrono::Duration::minutes(450));
+    assert_eq!(
+      day.presence_duration(),
+      Some(chrono::Duration::minutes(510))
+    );
+    assert_eq!(day.balance().unwrap(), Balance::Exact);
+  }
+
+  #[test]
+  fn balance_uses_overridden_required_work_hours_with_lunch() {
+    let mut day = make_user().new_day(date(2024, 1, 1));
+    day.required_work_hours = chrono::Duration::hours(7);
+    day.add_check_in(lt(8, 0)).unwrap();
+    day.add_check_out(lt(15, 30)).unwrap();
+    assert_eq!(
+      day.required_day_duration(),
+      chrono::Duration::hours(7) + chrono::Duration::minutes(30)
+    );
     assert_eq!(day.balance().unwrap(), Balance::Exact);
   }
 

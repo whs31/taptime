@@ -1,4 +1,5 @@
 import { createClient } from "@connectrpc/connect";
+import type { Duration } from "@bufbuild/protobuf";
 import { StoreService as StoreServiceRpc } from "@taptime/proto/taptime/services/store_connect.js";
 import { Date as ProtoDate } from "@taptime/proto/taptime/date_pb.js";
 import type { DayFlag } from "@taptime/proto/taptime/day_pb.js";
@@ -7,12 +8,12 @@ import {
   DashboardRequest,
   EventRequest,
   SetFlagRequest,
+  SetRequiredWorkHoursOverrideRequest,
 } from "@taptime/proto/taptime/services/store_pb.js";
 import { transport } from "$lib/grpc";
 import { AuthService } from "./AuthService";
 
 type DashboardRangeInput = {
-  name?: string;
   rangeStart: ProtoDate;
   rangeEnd: ProtoDate;
   today: ProtoDate;
@@ -89,6 +90,19 @@ export class StoreService {
     return this.client.setFlag(new SetFlagRequest({ date, flag }), {
       headers: AuthService.authHeaders(),
     });
+  }
+
+  static async setRequiredWorkHoursOverride(
+    date: ProtoDate,
+    requiredWorkHours?: Duration | null,
+  ) {
+    return this.client.setRequiredWorkHoursOverride(
+      new SetRequiredWorkHoursOverrideRequest({
+        date,
+        requiredWorkHours: requiredWorkHours ?? undefined,
+      }),
+      { headers: AuthService.authHeaders() },
+    );
   }
 
   static async addCheckIn(date: ProtoDate, time: LocalTime) {

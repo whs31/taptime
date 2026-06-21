@@ -143,6 +143,16 @@ export class DaySummary extends Message<DaySummary> {
    */
   fullDayWorked = false;
 
+  /**
+   * @generated from field: bool required_work_hours_overridden = 6;
+   */
+  requiredWorkHoursOverridden = false;
+
+  /**
+   * @generated from field: google.protobuf.Duration work_target = 7;
+   */
+  workTarget?: Duration;
+
   constructor(data?: PartialMessage<DaySummary>) {
     super();
     proto3.util.initPartial(data, this);
@@ -156,6 +166,8 @@ export class DaySummary extends Message<DaySummary> {
     { no: 3, name: "balance", kind: "message", T: Balance },
     { no: 4, name: "skipped", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 5, name: "full_day_worked", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "required_work_hours_overridden", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "work_target", kind: "message", T: Duration },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DaySummary {
@@ -306,6 +318,49 @@ export class SetFlagRequest extends Message<SetFlagRequest> {
 
   static equals(a: SetFlagRequest | PlainMessage<SetFlagRequest> | undefined, b: SetFlagRequest | PlainMessage<SetFlagRequest> | undefined): boolean {
     return proto3.util.equals(SetFlagRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message com.whs31.taptime.services.SetRequiredWorkHoursOverrideRequest
+ */
+export class SetRequiredWorkHoursOverrideRequest extends Message<SetRequiredWorkHoursOverrideRequest> {
+  /**
+   * @generated from field: com.whs31.taptime.Date date = 1;
+   */
+  date?: Date;
+
+  /**
+   * @generated from field: google.protobuf.Duration required_work_hours = 2;
+   */
+  requiredWorkHours?: Duration;
+
+  constructor(data?: PartialMessage<SetRequiredWorkHoursOverrideRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "com.whs31.taptime.services.SetRequiredWorkHoursOverrideRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "date", kind: "message", T: Date },
+    { no: 2, name: "required_work_hours", kind: "message", T: Duration },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SetRequiredWorkHoursOverrideRequest {
+    return new SetRequiredWorkHoursOverrideRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SetRequiredWorkHoursOverrideRequest {
+    return new SetRequiredWorkHoursOverrideRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SetRequiredWorkHoursOverrideRequest {
+    return new SetRequiredWorkHoursOverrideRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SetRequiredWorkHoursOverrideRequest | PlainMessage<SetRequiredWorkHoursOverrideRequest> | undefined, b: SetRequiredWorkHoursOverrideRequest | PlainMessage<SetRequiredWorkHoursOverrideRequest> | undefined): boolean {
+    return proto3.util.equals(SetRequiredWorkHoursOverrideRequest, a, b);
   }
 }
 

@@ -6,7 +6,7 @@ use taptime_schema::{
   Date,
   services::{
     DashboardRequest, DashboardResponse, DaySummary, EventRequest, MonthlyStats, SetFlagRequest,
-    store_service_server::StoreService,
+    SetRequiredWorkHoursOverrideRequest, store_service_server::StoreService,
   },
 };
 use tonic::{Request, Response, Status};
@@ -40,6 +40,19 @@ struct DayFlagRangeRow {
   flags: i32,
 }
 
+#[derive(sqlx::FromRow)]
+struct DayRequiredWorkOverrideRangeRow {
+  date_days: i32,
+  required_work_hours_secs: i64,
+}
+
+#[derive(Debug, Clone)]
+struct BuiltDay {
+  day: Day,
+  work_target: Duration,
+  required_work_hours_overridden: bool,
+}
+
 fn extract_user<T>(request: &Request<T>) -> Result<Uuid, Status> {
   request
     .extensions()
@@ -66,14 +79,47 @@ fn next_date(date: NaiveDate) -> Result<NaiveDate, Status> {
     .ok_or_else(|| Status::invalid_argument("Date range overflow"))
 }
 
+fn proto_duration_to_chrono(
+  duration: prost_types::Duration,
+  name: &'static str,
+) -> Result<Duration, Status> {
+  if duration.nanos < 0 || duration.nanos >= 1_000_000_000 {
+    return Err(Status::invalid_argument(format!("Invalid {name}")));
+  }
+  let duration =
+    Duration::seconds(duration.seconds) + Duration::nanoseconds(i64::from(duration.nanos));
+  if duration <= Duration::zero() {
+    return Err(Status::invalid_argument(format!("{name} must be positive")));
+  }
+  Ok(duration)
+}
+
+fn effective_work_target(user: &User, override_duration: Option<Duration>) -> Duration {
+  override_duration.unwrap_or(user.settings.required_work_hours)
+}
+
+fn required_work_hours_for(flags: DayFlags, work_target: Duration) -> Duration {
+  if flags.intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION) {
+    Duration::zero()
+  } else {
+    work_target
+  }
+}
+
 fn apply_day_flags(day: &mut Day, flags: DayFlags, user: &User) {
+  apply_day_configuration(day, flags, user, None);
+}
+
+fn apply_day_configuration(
+  day: &mut Day,
+  flags: DayFlags,
+  user: &User,
+  override_duration: Option<Duration>,
+) -> Duration {
+  let work_target = effective_work_target(user, override_duration);
   day.flags = flags;
-  day.required_work_hours =
-    if flags.intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION) {
-      Duration::zero()
-    } else {
-      user.settings.required_work_hours
-    };
+  day.required_work_hours = required_work_hours_for(flags, work_target);
+  work_target
 }
 
 fn row_to_event(event_kind: i16, hour: i16, minute: i16, second: i16) -> Result<Event, Status> {
@@ -97,11 +143,14 @@ fn is_calendar_regular_required_day(day: &Day) -> bool {
     .intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION | DayFlags::REMOTE)
 }
 
-fn dashboard_balance(day: &Day, clocked_work: Duration) -> Balance {
+fn dashboard_balance(day: &Day) -> Balance {
   if is_non_required_day(day) || day.is_remote() {
     Balance::Exact
   } else {
-    Balance::calculate(clocked_work, day.required_work_hours)
+    Balance::calculate(
+      day.presence_duration().unwrap_or(Duration::zero()),
+      day.required_day_duration(),
+    )
   }
 }
 
@@ -113,15 +162,18 @@ fn is_skipped_day(day: &Day, today: NaiveDate, clocked_work: Duration) -> bool {
     && day.events.is_empty()
 }
 
-fn summarize_day(day: &Day, today: NaiveDate, full_day_target: Duration) -> DaySummary {
+fn summarize_day(built_day: &BuiltDay, today: NaiveDate) -> DaySummary {
+  let day = &built_day.day;
   let clocked_work = day.clocked_work_duration();
-  let balance = dashboard_balance(day, clocked_work);
+  let balance = dashboard_balance(day);
   DaySummary {
     day: Some(taptime_schema::Day::from(day)),
     clocked_work: Some(clocked_work.into()),
     balance: Some(taptime_schema::Balance::from(&balance)),
     skipped: is_skipped_day(day, today, clocked_work),
-    full_day_worked: day.full_day_worked(full_day_target),
+    full_day_worked: day.full_day_worked(built_day.work_target),
+    required_work_hours_overridden: built_day.required_work_hours_overridden,
+    work_target: Some(built_day.work_target.into()),
   }
 }
 
@@ -130,18 +182,26 @@ fn build_days_from_maps(
   start: NaiveDate,
   end: NaiveDate,
   flags_by_day: &BTreeMap<i32, DayFlags>,
+  overrides_by_day: &BTreeMap<i32, Duration>,
   mut events_by_day: BTreeMap<i32, Vec<Event>>,
-) -> Result<Vec<Day>, Status> {
+) -> Result<Vec<BuiltDay>, Status> {
   let mut days = Vec::new();
   let mut date = start;
   loop {
     let days_since_epoch = date_to_epoch_days(date);
     let mut day = user.new_day(date);
-    if let Some(flags) = flags_by_day.get(&days_since_epoch) {
-      apply_day_flags(&mut day, *flags, user);
-    }
+    let flags = flags_by_day
+      .get(&days_since_epoch)
+      .copied()
+      .unwrap_or(day.flags);
+    let override_duration = overrides_by_day.get(&days_since_epoch).copied();
+    let work_target = apply_day_configuration(&mut day, flags, user, override_duration);
     day.events = events_by_day.remove(&days_since_epoch).unwrap_or_default();
-    days.push(day);
+    days.push(BuiltDay {
+      day,
+      work_target,
+      required_work_hours_overridden: override_duration.is_some(),
+    });
     if date == end {
       break;
     }
@@ -152,11 +212,10 @@ fn build_days_from_maps(
 }
 
 fn build_monthly_stats(
-  days: &[Day],
+  days: &[BuiltDay],
   month_start: NaiveDate,
   month_end: NaiveDate,
   today: NaiveDate,
-  full_day_target: Duration,
 ) -> MonthlyStats {
   let mut monthly_stats = MonthlyStats {
     total_clocked_work: Some(Duration::zero().into()),
@@ -174,7 +233,8 @@ fn build_monthly_stats(
   let mut overtime = Duration::zero();
   let mut undertime = Duration::zero();
 
-  for day in days {
+  for built_day in days {
+    let day = &built_day.day;
     if day.date < month_start || day.date > month_end || day.date > today {
       continue;
     }
@@ -194,7 +254,7 @@ fn build_monthly_stats(
       monthly_stats.vacation_days += 1;
     }
 
-    let summary = summarize_day(day, today, full_day_target);
+    let summary = summarize_day(built_day, today);
     if summary.skipped {
       monthly_stats.skipped_days += 1;
     }
@@ -205,7 +265,7 @@ fn build_monthly_stats(
       monthly_stats.full_vacation_work_days += 1;
     }
     if is_calendar_regular_required_day(day) {
-      match dashboard_balance(day, clocked_work) {
+      match dashboard_balance(day) {
         Balance::Overtime(duration) => overtime = overtime + duration,
         Balance::UnderTime(duration) => undertime = undertime + duration,
         Balance::Exact => {}
@@ -226,6 +286,7 @@ impl StoreServiceImpl {
       .await?
       .into_iter()
       .next()
+      .map(|built_day| built_day.day)
       .ok_or_else(|| Status::internal("Failed to build day"))
   }
 
@@ -234,7 +295,7 @@ impl StoreServiceImpl {
     user_id: Uuid,
     start: NaiveDate,
     end: NaiveDate,
-  ) -> Result<Vec<Day>, Status> {
+  ) -> Result<Vec<BuiltDay>, Status> {
     if start > end {
       return Err(Status::invalid_argument("Date range start is after end"));
     }
@@ -261,6 +322,25 @@ impl StoreServiceImpl {
       })
       .collect();
 
+    let override_rows = sqlx::query_as::<_, DayRequiredWorkOverrideRangeRow>(include_str!(
+      "queries/fetch_day_required_work_overrides_range.sql"
+    ))
+    .bind(user_id)
+    .bind(start_days)
+    .bind(end_days)
+    .fetch_all(&self.db)
+    .await
+    .map_err(|e| Status::internal(e.to_string()))?;
+    let overrides_by_day: BTreeMap<i32, Duration> = override_rows
+      .into_iter()
+      .map(|row| {
+        (
+          row.date_days,
+          Duration::seconds(row.required_work_hours_secs),
+        )
+      })
+      .collect();
+
     let event_rows =
       sqlx::query_as::<_, EventRangeRow>(include_str!("queries/fetch_events_range.sql"))
         .bind(user_id)
@@ -282,7 +362,14 @@ impl StoreServiceImpl {
         )?);
     }
 
-    build_days_from_maps(&user, start, end, &flags_by_day, events_by_day)
+    build_days_from_maps(
+      &user,
+      start,
+      end,
+      &flags_by_day,
+      &overrides_by_day,
+      events_by_day,
+    )
   }
 
   async fn build_dashboard(
@@ -298,17 +385,15 @@ impl StoreServiceImpl {
       return Err(Status::invalid_argument("Date range start is after end"));
     }
 
-    let user = fetch_core_user(&self.db, user_id).await?;
     let start = range_start.min(month_start);
     let end = range_end.max(month_end);
     let days = self.build_days(user_id, start, end).await?;
-    let full_day_target = user.settings.required_work_hours;
     let summaries = days
       .iter()
-      .filter(|day| day.date >= range_start && day.date <= range_end)
-      .map(|day| summarize_day(day, today, full_day_target))
+      .filter(|built_day| built_day.day.date >= range_start && built_day.day.date <= range_end)
+      .map(|built_day| summarize_day(built_day, today))
       .collect();
-    let monthly_stats = build_monthly_stats(&days, month_start, month_end, today, full_day_target);
+    let monthly_stats = build_monthly_stats(&days, month_start, month_end, today);
 
     Ok(DashboardResponse {
       days: summaries,
@@ -401,6 +486,43 @@ impl StoreService for StoreServiceImpl {
       .execute(&self.db)
       .await
       .map_err(|e| Status::internal(e.to_string()))?;
+
+    Ok(Response::new(()))
+  }
+
+  async fn set_required_work_hours_override(
+    self: Arc<Self>,
+    request: Request<SetRequiredWorkHoursOverrideRequest>,
+  ) -> Result<Response<()>, Status> {
+    let user_id = extract_user(&request)?;
+    let req = request.into_inner();
+    let date: chrono::NaiveDate = req
+      .date
+      .ok_or_else(|| Status::invalid_argument("Missing date"))?
+      .into();
+    let days = date_to_epoch_days(date);
+
+    if let Some(required_work_hours) = req.required_work_hours {
+      let duration = proto_duration_to_chrono(required_work_hours, "required_work_hours")?;
+      sqlx::query(include_str!(
+        "queries/upsert_day_required_work_override.sql"
+      ))
+      .bind(user_id)
+      .bind(days)
+      .bind(duration.num_seconds())
+      .execute(&self.db)
+      .await
+      .map_err(|e| Status::internal(e.to_string()))?;
+    } else {
+      sqlx::query(include_str!(
+        "queries/delete_day_required_work_override.sql"
+      ))
+      .bind(user_id)
+      .bind(days)
+      .execute(&self.db)
+      .await
+      .map_err(|e| Status::internal(e.to_string()))?;
+    }
 
     Ok(Response::new(()))
   }
@@ -518,6 +640,14 @@ mod tests {
       .unwrap_or(0)
   }
 
+  fn built_day(day: Day, user: &User) -> BuiltDay {
+    BuiltDay {
+      day,
+      work_target: user.settings.required_work_hours,
+      required_work_hours_overridden: false,
+    }
+  }
+
   #[test]
   fn build_days_from_maps_includes_empty_days_and_applies_flags_events() {
     let user = make_user();
@@ -534,15 +664,50 @@ mod tests {
       vec![Event::CheckIn(lt(9, 0)), Event::CheckOut(lt(12, 0))],
     );
 
-    let days = build_days_from_maps(&user, start, end, &flags_by_day, events_by_day).unwrap();
+    let days = build_days_from_maps(
+      &user,
+      start,
+      end,
+      &flags_by_day,
+      &BTreeMap::new(),
+      events_by_day,
+    )
+    .unwrap();
 
     assert_eq!(days.len(), 3);
-    assert_eq!(days[0].date, date(2024, 1, 1));
-    assert!(days[0].events.is_empty());
-    assert!(days[1].is_vacation());
-    assert!(days[1].is_remote());
-    assert_eq!(days[1].required_work_hours, Duration::zero());
-    assert_eq!(days[2].clocked_work_duration(), Duration::hours(3));
+    assert_eq!(days[0].day.date, date(2024, 1, 1));
+    assert!(days[0].day.events.is_empty());
+    assert!(days[1].day.is_vacation());
+    assert!(days[1].day.is_remote());
+    assert_eq!(days[1].day.required_work_hours, Duration::zero());
+    assert_eq!(days[2].day.clocked_work_duration(), Duration::hours(3));
+  }
+
+  #[test]
+  fn build_days_from_maps_applies_required_work_override() {
+    let user = make_user();
+    let start = date(2024, 1, 1);
+    let end = date(2024, 1, 2);
+    let flags_by_day = BTreeMap::new();
+    let mut overrides_by_day = BTreeMap::new();
+    overrides_by_day.insert(date_to_epoch_days(start), Duration::hours(7));
+
+    let days = build_days_from_maps(
+      &user,
+      start,
+      end,
+      &flags_by_day,
+      &overrides_by_day,
+      BTreeMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(days[0].day.required_work_hours, Duration::hours(7));
+    assert_eq!(days[0].work_target, Duration::hours(7));
+    assert!(days[0].required_work_hours_overridden);
+    assert_eq!(days[1].day.required_work_hours, Duration::hours(8));
+    assert_eq!(days[1].work_target, Duration::hours(8));
+    assert!(!days[1].required_work_hours_overridden);
   }
 
   #[test]
@@ -561,19 +726,21 @@ mod tests {
     worked.add_event(Event::CheckIn(lt(9, 0))).unwrap();
     worked.add_event(Event::CheckOut(lt(17, 0))).unwrap();
 
-    let stats = build_monthly_stats(
-      &[skipped, day_off, vacation, weekend, worked],
-      date(2024, 1, 1),
-      date(2024, 1, 31),
-      date(2024, 1, 5),
-      user.settings.required_work_hours,
-    );
+    let days = [
+      built_day(skipped, &user),
+      built_day(day_off, &user),
+      built_day(vacation, &user),
+      built_day(weekend, &user),
+      built_day(worked, &user),
+    ];
+
+    let stats = build_monthly_stats(&days, date(2024, 1, 1), date(2024, 1, 31), date(2024, 1, 5));
 
     assert_eq!(stats.skipped_days, 1);
     assert_eq!(stats.day_offs, 1);
     assert_eq!(stats.vacation_days, 1);
     assert_eq!(stats.worked_days, 1);
-    assert_eq!(duration_seconds(&stats.undertime), 8 * 60 * 60);
+    assert_eq!(duration_seconds(&stats.undertime), 9 * 60 * 60);
     assert_eq!(duration_seconds(&stats.overtime), 0);
   }
 
@@ -595,12 +762,13 @@ mod tests {
     vacation.add_event(Event::CheckIn(lt(13, 30))).unwrap();
     vacation.add_event(Event::CheckOut(lt(17, 0))).unwrap();
 
+    let days = [built_day(weekend, &user), built_day(vacation, &user)];
+
     let stats = build_monthly_stats(
-      &[weekend, vacation],
+      &days,
       date(2024, 1, 1),
       date(2024, 1, 31),
       date(2024, 1, 31),
-      user.settings.required_work_hours,
     );
 
     assert_eq!(stats.worked_days, 2);

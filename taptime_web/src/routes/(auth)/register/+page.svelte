@@ -13,6 +13,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Password from "$lib/components/ui/password";
   import type { ZxcvbnResult } from "@zxcvbn-ts/core";
+  import { WEEKDAY_LABELS } from "$lib/account";
   import { AuthService } from "$lib/services";
   import { User, User_Settings } from "@taptime/proto/taptime/user_pb.js";
   import { Tz } from "@taptime/proto/taptime/tz_pb.js";
@@ -69,17 +70,6 @@
   const nextDisabled = $derived(
     (step === 1 && !step1Valid) || (step === 2 && !step2Valid),
   );
-
-  const DAY_LABELS: Record<Weekday, string> = {
-    [Weekday.MONDAY]: "Mon",
-    [Weekday.TUESDAY]: "Tue",
-    [Weekday.WEDNESDAY]: "Wed",
-    [Weekday.THURSDAY]: "Thu",
-    [Weekday.FRIDAY]: "Fri",
-    [Weekday.SATURDAY]: "Sat",
-    [Weekday.SUNDAY]: "Sun",
-    [Weekday.UNSPECIFIED]: "",
-  };
 
   async function submit() {
     submitting = true;
@@ -268,12 +258,12 @@
               </p>
               <p class="text-muted-foreground">
                 Weekends: {weekends.length > 0
-                  ? weekends.map((d) => DAY_LABELS[d]).join(", ")
+                  ? weekends.map((d) => WEEKDAY_LABELS[d]).join(", ")
                   : "none"}
               </p>
               {#if remoteDays.length > 0}
                 <p class="text-muted-foreground">
-                  Remote: {remoteDays.map((d) => DAY_LABELS[d]).join(", ")}
+                  Remote: {remoteDays.map((d) => WEEKDAY_LABELS[d]).join(", ")}
                 </p>
               {/if}
             </div>

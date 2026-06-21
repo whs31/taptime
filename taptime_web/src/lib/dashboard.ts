@@ -272,6 +272,37 @@ export function computeWorkSeconds(d: Day | null | undefined, currentSeconds?: n
   return total;
 }
 
+export function computePresenceSeconds(
+  d: Day | null | undefined,
+  currentSeconds?: number,
+) {
+  if (!d) return 0;
+
+  let firstCheckInSeconds: number | null = null;
+  let lastCheckOutSeconds: number | null = null;
+
+  for (const event of d.events) {
+    const seconds = eventSeconds(event);
+    if (seconds === null) continue;
+
+    if (event.eventType.case === "checkIn") {
+      firstCheckInSeconds ??= seconds;
+    } else {
+      lastCheckOutSeconds = seconds;
+    }
+  }
+
+  if (firstCheckInSeconds === null) return 0;
+  if (
+    currentSeconds !== undefined &&
+    d.events[d.events.length - 1]?.eventType.case === "checkIn"
+  ) {
+    return Math.max(0, currentSeconds - firstCheckInSeconds);
+  }
+  if (lastCheckOutSeconds === null) return 0;
+  return Math.max(0, lastCheckOutSeconds - firstCheckInSeconds);
+}
+
 export function buildSessions(
   d: Day | null | undefined,
   currentSeconds?: number,
@@ -332,6 +363,18 @@ export function isRegularRequiredDay(day: Day | null | undefined) {
   return (day.flags & nonRegularFlags) === 0;
 }
 
+export function requiredDaySeconds(day: Day | null | undefined) {
+  const work = durationSeconds(day?.requiredWorkHours);
+  if (work <= 0) return 0;
+  return work + durationSeconds(day?.lunchBreakDuration);
+}
+
+export function workTargetSeconds(summary: DaySummary | null | undefined) {
+  return summary?.workTarget
+    ? durationSeconds(summary.workTarget)
+    : durationSeconds(summary?.day?.requiredWorkHours);
+}
+
 export function serverBalanceSeconds(balance?: Balance): number {
   switch (balance?.balanceType.case) {
     case "overtime":
@@ -357,15 +400,16 @@ export function summaryClockedSeconds(
 export function liveBalanceSeconds(
   summary: DaySummary | null | undefined,
   liveDay?: number,
-  liveSeconds?: number,
+  currentSeconds?: number,
 ) {
   if (!summary?.day || !isRegularRequiredDay(summary.day)) {
     return serverBalanceSeconds(summary?.balance);
   }
-  return (
-    summaryClockedSeconds(summary, liveDay, liveSeconds) -
-    durationSeconds(summary.day.requiredWorkHours)
-  );
+  const presence =
+    liveDay !== undefined && dayKey(summary.day) === liveDay
+      ? computePresenceSeconds(summary.day, currentSeconds)
+      : computePresenceSeconds(summary.day);
+  return presence - requiredDaySeconds(summary.day);
 }
 
 export function balanceLabel(
@@ -488,7 +532,7 @@ export function exceptionRows(items: DaySummary[]): ExceptionRow[] {
       const key = dayKey(summary.day);
       if (key === null || !summary.day) return [];
       const clocked = durationSeconds(summary.clockedWork);
-      const required = durationSeconds(summary.day.requiredWorkHours);
+      const required = requiredDaySeconds(summary.day);
       const balance = serverBalanceSeconds(summary.balance);
       const rows: ExceptionRow[] = [];
 
