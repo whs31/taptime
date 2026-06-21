@@ -67,6 +67,11 @@
 
   type CalendarCell = DaySummary | null;
   type ManualTarget = "today" | "selected";
+  type ChartMonthOption = {
+    value: string;
+    monthStart: number;
+    label: string;
+  };
 
   const tz = $derived(
     userStore.user?.timeZone?.timeZone ??
@@ -89,6 +94,7 @@
   let overrideHours = $state(0);
   let overrideMinutes = $state(0);
   let overrideLoadedKey = $state("");
+  let chartMonthValue = $state("");
   let loadedWindowKey = $state("");
   let selectedDayKey = $state<number | null>(null);
 
@@ -133,17 +139,21 @@
   const todaySessions = $derived(buildSessions(day, currentSeconds));
   const todayEventItems = $derived(buildEventListItems(day));
   const selectedEventItems = $derived(buildEventListItems(selectedSummary?.day));
+  const chartMonthOptions = $derived(buildChartMonthOptions(summaries));
+  const chartMonthStart = $derived(
+    parseChartMonthValue(chartMonthValue, todayDays),
+  );
   const monthSummaries = $derived(
     summaries.filter((summary) => {
       const key = dayKey(summary.day);
       return (
         key !== null &&
-        key >= monthStartDay(todayDays) &&
-        key <= monthEndDay(todayDays)
+        key >= chartMonthStart &&
+        key <= monthEndDay(chartMonthStart)
       );
     }),
   );
-  const chartModel = $derived(buildMonthRhythmModel(monthSummaries, todayDays));
+  const chartModel = $derived(buildMonthRhythmModel(monthSummaries, chartMonthStart));
   const selectedManualTargetAvailable = $derived(
     Boolean(
       selectedSummary?.day?.date &&
@@ -243,6 +253,13 @@
   });
 
   $effect(() => {
+    if (chartMonthOptions.length === 0) return;
+    if (!chartMonthOptions.some((option) => option.value === chartMonthValue)) {
+      chartMonthValue = String(monthStartDay(selectedDayKey ?? todayDays));
+    }
+  });
+
+  $effect(() => {
     const key = [
       selectedSummary?.day?.date?.daysSinceEpoch ?? "none",
       selectedWorkTargetSeconds,
@@ -318,6 +335,7 @@
       dashboard = nextDashboard;
       if (selectedDayKey === null || !nextSummaryByDay.has(selectedDayKey)) {
         selectedDayKey = window.today.daysSinceEpoch;
+        chartMonthValue = String(monthStartDay(selectedDayKey));
       }
       tick();
     } catch (e) {
@@ -464,6 +482,15 @@
     return `${dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)} - ${dayKindLabel(summary)} - ${balanceLabel(summary)}`;
   }
 
+  function selectActivityDay(date: number | null | undefined) {
+    if (date === null || date === undefined) {
+      selectedDayKey = null;
+      return;
+    }
+    selectedDayKey = date;
+    chartMonthValue = String(monthStartDay(date));
+  }
+
   function takeDayOffTooltip() {
     if (hasCheckInToday) return "Unavailable after check-in";
     if (todayIsDayOff) return "Today is already marked as a day off";
@@ -481,6 +508,28 @@
     }
     cells.push(...items);
     return cells;
+  }
+
+  function buildChartMonthOptions(items: DaySummary[]): ChartMonthOption[] {
+    const months = new Map<number, ChartMonthOption>();
+    for (const summary of items) {
+      const key = dayKey(summary.day);
+      if (key === null) continue;
+      const monthStart = monthStartDay(key);
+      if (!months.has(monthStart)) {
+        months.set(monthStart, {
+          value: String(monthStart),
+          monthStart,
+          label: monthLabel(monthStart),
+        });
+      }
+    }
+    return [...months.values()].sort((a, b) => b.monthStart - a.monthStart);
+  }
+
+  function parseChartMonthValue(value: string, fallbackDay: number) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : monthStartDay(fallbackDay);
   }
 
   function themeMix(token: string, amount: number, base = "var(--card)") {
@@ -1048,8 +1097,7 @@
                           : ''}"
                         style={calendarCellStyle(summary)}
                         onclick={() =>
-                          (selectedDayKey =
-                            summary.day?.date?.daysSinceEpoch ?? null)}
+                          selectActivityDay(summary.day?.date?.daysSinceEpoch)}
                       >
                         <span class="sr-only">
                           {dateLabel(summary.day?.date?.daysSinceEpoch ?? 0)}
@@ -1098,9 +1146,30 @@
     </Card.Root>
 
     <Card.Root>
-      <Card.Header>
-        <Card.Title>Month Rhythm</Card.Title>
-        <Card.Description>First check-in, last checkout, and intermediate taps</Card.Description>
+      <Card.Header class="gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="space-y-1">
+          <Card.Title>Month Rhythm</Card.Title>
+          <Card.Description>{monthLabel(chartMonthStart)} check-ins, checkouts, and taps</Card.Description>
+        </div>
+        <Select.Root
+          type="single"
+          name="dashboard-chart-month"
+          value={chartMonthValue}
+          onValueChange={(value) => {
+            if (value) chartMonthValue = value;
+          }}
+        >
+          <Select.Trigger id="dashboard-chart-month" class="w-full sm:w-44">
+            {monthLabel(chartMonthStart)}
+          </Select.Trigger>
+          <Select.Content>
+            {#each chartMonthOptions as option (option.value)}
+              <Select.Item value={option.value} label={option.label}>
+                {option.label}
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
       </Card.Header>
       <Card.Content>
         <div class="w-full overflow-x-auto">
@@ -1169,6 +1238,17 @@
                 <title>{point.label}</title>
               </circle>
             {/each}
+            {#if chartModel.points.length === 0}
+              <text
+                x="359"
+                y="112"
+                text-anchor="middle"
+                fill="currentColor"
+                class="text-muted-foreground"
+              >
+                No check-in or checkout events in {monthLabel(chartMonthStart)}
+              </text>
+            {/if}
           </svg>
         </div>
         <div class="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
