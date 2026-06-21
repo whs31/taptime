@@ -894,7 +894,10 @@
                 {#snippet child({ props })}
                   <Button
                     {...props}
-                    onclick={() => resetManualEventForm("today")}
+                    onclick={() => {
+                      resetManualEventForm("today");
+                      manualEventOpen = true;
+                    }}
                     disabled={loading || submitting || flagUpdating || manualSubmitting}
                     variant="secondary"
                     class="w-full sm:w-36"
