@@ -11,6 +11,15 @@ import {
 import { transport } from "$lib/grpc";
 import { AuthService } from "./AuthService";
 
+type DashboardRangeInput = {
+  name?: string;
+  rangeStart: ProtoDate;
+  rangeEnd: ProtoDate;
+  today: ProtoDate;
+  monthStart?: ProtoDate;
+  monthEnd?: ProtoDate;
+};
+
 export class StoreService {
   private static client = createClient(StoreServiceRpc, transport);
 
@@ -64,6 +73,16 @@ export class StoreService {
       }),
       { headers: AuthService.authHeaders() },
     );
+  }
+
+  static async getDashboardRange({
+    rangeStart,
+    rangeEnd,
+    today,
+    monthStart = rangeStart,
+    monthEnd = rangeEnd,
+  }: DashboardRangeInput) {
+    return this.getDashboard(rangeStart, rangeEnd, monthStart, monthEnd, today);
   }
 
   static async setFlag(date: ProtoDate, flag: DayFlag) {
