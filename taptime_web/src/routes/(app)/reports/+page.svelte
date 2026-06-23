@@ -64,7 +64,7 @@
     { label: "Day off", value: totals.dayOffs, color: "var(--muted-foreground)" },
     { label: "Vacation", value: totals.vacationDays, color: "var(--primary)" },
     { label: "Skipped", value: totals.skippedDays, color: "var(--destructive)" },
-    { label: "Weekend work", value: totals.fullWeekendWorkDays, color: "var(--chart-5)" },
+    { label: "Weekend work", value: totals.fullWeekendWorkDays, color: "var(--activity-weekend-work)" },
     { label: "Vacation work", value: totals.fullVacationWorkDays, color: "var(--chart-4)" },
   ]);
   const maxStatus = $derived(Math.max(1, ...statusBars.map((bar) => bar.value)));

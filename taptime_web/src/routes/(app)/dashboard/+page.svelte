@@ -556,26 +556,26 @@
       return activityCell(themeMix("--primary", 48));
     }
     if (hasFlag(summary, DayFlag.REMOTE)) {
-      return activityCell(themeMix("--activity-remote", 62));
+      return activityCell(themeMix("--activity-remote", 82));
     }
     if (hasFlag(summary, DayFlag.WEEKEND)) {
       return summary.fullDayWorked
-        ? activityCell(themeMix("--chart-5", 68))
+        ? activityCell(themeMix("--activity-weekend-work", 84))
         : activityCell(themeMix("--muted", 78));
     }
     if (summary.skipped) {
-      return activityCell(themeMix("--destructive", 66));
+      return activityCell(themeMix("--destructive", 76));
     }
 
     const delta = liveBalanceSeconds(summary);
     const required = Math.max(1, requiredDaySeconds(summary.day));
     if (delta < 0) {
       const amount = Math.min(1, Math.abs(delta) / required);
-      return activityCell(themeMix("--destructive", 30 + amount * 36));
+      return activityCell(themeMix("--destructive", 42 + amount * 38));
     }
 
     const amount = Math.min(1, delta / required);
-    return activityCell(themeMix("--chart-1", 26 + amount * 40));
+    return activityCell(themeMix("--chart-1", 42 + amount * 44));
   }
 
   function calendarDots(summary: DaySummary | null) {
@@ -583,7 +583,7 @@
     const dots: string[] = [];
     const clocked = summaryClockedSeconds(summary);
     if (hasFlag(summary, DayFlag.VACATION) && summary.fullDayWorked) {
-      dots.push("var(--chart-5)");
+      dots.push("var(--activity-weekend-work)");
     } else if (
       (hasFlag(summary, DayFlag.REMOTE) || hasFlag(summary, DayFlag.DAY_OFF)) &&
       clocked > 0
