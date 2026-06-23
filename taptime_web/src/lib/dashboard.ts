@@ -423,6 +423,14 @@ export function requiredDaySeconds(day: Day | null | undefined) {
   return work + durationSeconds(day?.lunchBreakDuration);
 }
 
+export function summaryRequiredSeconds(summary: DaySummary | null | undefined) {
+  if (!summary?.day) return 0;
+  if (summary.skipped) {
+    return durationSeconds(summary.day.requiredWorkHours);
+  }
+  return requiredDaySeconds(summary.day);
+}
+
 export function workTargetSeconds(summary: DaySummary | null | undefined) {
   return summary?.workTarget
     ? durationSeconds(summary.workTarget)
@@ -591,7 +599,7 @@ export function exceptionRows(items: DaySummary[]): ExceptionRow[] {
       const key = dayKey(summary.day);
       if (key === null || !summary.day) return [];
       const clocked = durationSeconds(summary.clockedWork);
-      const required = requiredDaySeconds(summary.day);
+      const required = summaryRequiredSeconds(summary);
       const balance = serverBalanceSeconds(summary.balance);
       const rows: ExceptionRow[] = [];
 

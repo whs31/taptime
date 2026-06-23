@@ -35,7 +35,7 @@
     parseManualTime,
     protoDate,
     rangeLabel,
-    requiredDaySeconds,
+    summaryRequiredSeconds,
     summaryClockedSeconds,
     todayDate,
     workTargetSeconds,
@@ -505,7 +505,7 @@
                     <Table.Cell class="font-mono tabular-nums">{formatTime(firstCheckIn(summary))}</Table.Cell>
                     <Table.Cell class="font-mono tabular-nums">{formatTime(lastCheckOut(summary))}</Table.Cell>
                     <Table.Cell class="font-mono tabular-nums">{formatHours(summaryClockedSeconds(summary))}</Table.Cell>
-                    <Table.Cell class="font-mono tabular-nums">{formatHours(requiredDaySeconds(summary.day))}</Table.Cell>
+                    <Table.Cell class="font-mono tabular-nums">{formatHours(summaryRequiredSeconds(summary))}</Table.Cell>
                     <Table.Cell>{balanceLabel(summary)}</Table.Cell>
                     <Table.Cell class="text-right font-mono tabular-nums">{buildSessions(summary.day).length}</Table.Cell>
                   </Table.Row>

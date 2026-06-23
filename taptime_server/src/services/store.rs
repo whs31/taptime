@@ -172,13 +172,18 @@ fn is_calendar_regular_required_day(day: &Day) -> bool {
     .intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION | DayFlags::REMOTE)
 }
 
-fn dashboard_balance(day: &Day, before_start_date: bool) -> Balance {
+fn dashboard_balance(day: &Day, before_start_date: bool, skipped: bool) -> Balance {
   if before_start_date || is_non_required_day(day) || day.is_remote() {
     Balance::Exact
   } else {
+    let required = if skipped {
+      day.required_work_hours
+    } else {
+      day.required_day_duration()
+    };
     Balance::calculate(
       day.presence_duration().unwrap_or(Duration::zero()),
-      day.required_day_duration(),
+      required,
     )
   }
 }
@@ -194,12 +199,13 @@ fn is_skipped_day(day: &Day, today: NaiveDate, clocked_work: Duration) -> bool {
 fn summarize_day(built_day: &BuiltDay, today: NaiveDate) -> DaySummary {
   let day = &built_day.day;
   let clocked_work = day.clocked_work_duration();
-  let balance = dashboard_balance(day, built_day.before_start_date);
+  let skipped = !built_day.before_start_date && is_skipped_day(day, today, clocked_work);
+  let balance = dashboard_balance(day, built_day.before_start_date, skipped);
   DaySummary {
     day: Some(schema_day_from_built_day(built_day)),
     clocked_work: Some(clocked_work.into()),
     balance: Some(taptime_schema::Balance::from(&balance)),
-    skipped: !built_day.before_start_date && is_skipped_day(day, today, clocked_work),
+    skipped,
     full_day_worked: !built_day.before_start_date && day.full_day_worked(built_day.work_target),
     required_work_hours_overridden: built_day.required_work_hours_overridden,
     work_target: Some(built_day.work_target.into()),
@@ -315,7 +321,7 @@ fn build_monthly_stats(
       monthly_stats.full_vacation_work_days += 1;
     }
     if is_calendar_regular_required_day(day) {
-      match dashboard_balance(day, built_day.before_start_date) {
+      match dashboard_balance(day, built_day.before_start_date, summary.skipped) {
         Balance::Overtime(duration) => overtime = overtime + duration,
         Balance::UnderTime(duration) => undertime = undertime + duration,
         Balance::Exact => {}
@@ -490,8 +496,20 @@ impl StoreService for StoreServiceImpl {
   ) -> Result<Response<taptime_schema::Balance>, Status> {
     let user_id = self.authenticated_user(&request).await?;
     let date: chrono::NaiveDate = request.into_inner().into();
-    let day = self.build_day(user_id, date).await?;
-    let balance = day.balance().map_err(|e| Status::internal(e.to_string()))?;
+    let user = fetch_core_user(&self.db, user_id).await?;
+    let today = chrono::Utc::now()
+      .with_timezone(&user.time_zone)
+      .date_naive();
+    let built_day = self
+      .build_days(user_id, date, date)
+      .await?
+      .into_iter()
+      .next()
+      .ok_or_else(|| Status::internal("Failed to build day"))?;
+    let day = &built_day.day;
+    let clocked_work = day.clocked_work_duration();
+    let skipped = !built_day.before_start_date && is_skipped_day(day, today, clocked_work);
+    let balance = dashboard_balance(day, built_day.before_start_date, skipped);
     Ok(Response::new(taptime_schema::Balance::from(&balance)))
   }
 
@@ -839,10 +857,16 @@ mod tests {
     let summary = summarize_day(&days[0], date(2024, 1, 3));
     assert!(summary.before_start_date);
     assert!(!summary.skipped);
+    let skipped_summary = summarize_day(&days[1], date(2024, 1, 3));
+    assert!(skipped_summary.skipped);
+    assert_eq!(
+      Balance::try_from(skipped_summary.balance.as_ref().unwrap()).unwrap(),
+      Balance::UnderTime(Duration::hours(8))
+    );
 
     let stats = build_monthly_stats(&days, date(2024, 1, 1), date(2024, 1, 31), date(2024, 1, 3));
     assert_eq!(stats.skipped_days, 1);
-    assert_eq!(duration_seconds(&stats.undertime), 8 * 60 * 60 + 30 * 60);
+    assert_eq!(duration_seconds(&stats.undertime), 8 * 60 * 60);
   }
 
   #[test]
@@ -875,7 +899,7 @@ mod tests {
     assert_eq!(stats.day_offs, 1);
     assert_eq!(stats.vacation_days, 1);
     assert_eq!(stats.worked_days, 1);
-    assert_eq!(duration_seconds(&stats.undertime), 9 * 60 * 60);
+    assert_eq!(duration_seconds(&stats.undertime), 8 * 60 * 60 + 30 * 60);
     assert_eq!(duration_seconds(&stats.overtime), 0);
   }
 

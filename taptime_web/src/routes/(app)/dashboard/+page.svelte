@@ -45,6 +45,7 @@
     parseManualTime,
     protoDate,
     requiredDaySeconds,
+    summaryRequiredSeconds,
     summaryClockedSeconds as sharedSummaryClockedSeconds,
     workTargetSeconds,
     type EventListItem,
@@ -1034,7 +1035,7 @@
           <div>
             <div class="text-muted-foreground text-xs uppercase">Required</div>
             <div class="font-mono">
-              {formatSeconds(requiredDaySeconds(selectedSummary?.day))}
+              {formatSeconds(summaryRequiredSeconds(selectedSummary))}
             </div>
           </div>
         </div>
