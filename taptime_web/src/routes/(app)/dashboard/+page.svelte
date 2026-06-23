@@ -72,6 +72,14 @@
     monthStart: number;
     label: string;
   };
+  type StatItem = {
+    label: string;
+    value: string;
+  };
+  type MonthStatsViewModel = {
+    balanceSeconds: number;
+    items: StatItem[];
+  };
 
   const tz = $derived(
     userStore.user?.timeZone?.timeZone ??
@@ -226,7 +234,8 @@
     { flag: DayFlag.VACATION, label: "Vacation" },
   ];
 
-  const statItems = $derived(buildStatItems(monthStats, todaySummary));
+  const monthStatsView = $derived(buildMonthStatsView(monthStats, todaySummary));
+  const statItems = $derived(monthStatsView.items);
 
   $effect(() => {
     const window = dashboardWindow(tz);
@@ -593,10 +602,14 @@
     return dots;
   }
 
-  function buildStatItems(
+  function signedHours(seconds: number) {
+    return seconds > 0 ? `+${formatHours(seconds)}` : formatHours(seconds);
+  }
+
+  function buildMonthStatsView(
     stats: MonthlyStats | null,
     today: DaySummary | null,
-  ) {
+  ): MonthStatsViewModel {
     const closedToday = today?.beforeStartDate
       ? 0
       : durationSeconds(today?.clockedWork);
@@ -617,30 +630,33 @@
       undertime += live.undertime - closed.undertime;
     }
 
-    return [
-      {
-        label: "Clocked",
-        value: formatHours(totalClocked),
-      },
-      { label: "Overtime", value: formatHours(overtime) },
-      {
-        label: "Undertime",
-        value: formatHours(undertime),
-      },
-      { label: "Worked days", value: String(stats?.workedDays ?? 0) },
-      { label: "Remote", value: String(stats?.remoteDays ?? 0) },
-      { label: "Day off", value: String(stats?.dayOffs ?? 0) },
-      { label: "Vacation", value: String(stats?.vacationDays ?? 0) },
-      { label: "Skipped", value: String(stats?.skippedDays ?? 0) },
-      {
-        label: "Weekend work",
-        value: String(stats?.fullWeekendWorkDays ?? 0),
-      },
-      {
-        label: "Vacation work",
-        value: String(stats?.fullVacationWorkDays ?? 0),
-      },
-    ];
+    return {
+      balanceSeconds: overtime - undertime,
+      items: [
+        {
+          label: "Clocked",
+          value: formatHours(totalClocked),
+        },
+        { label: "Overtime", value: formatHours(overtime) },
+        {
+          label: "Undertime",
+          value: formatHours(undertime),
+        },
+        { label: "Worked days", value: String(stats?.workedDays ?? 0) },
+        { label: "Remote", value: String(stats?.remoteDays ?? 0) },
+        { label: "Day off", value: String(stats?.dayOffs ?? 0) },
+        { label: "Vacation", value: String(stats?.vacationDays ?? 0) },
+        { label: "Skipped", value: String(stats?.skippedDays ?? 0) },
+        {
+          label: "Weekend work",
+          value: String(stats?.fullWeekendWorkDays ?? 0),
+        },
+        {
+          label: "Vacation work",
+          value: String(stats?.fullVacationWorkDays ?? 0),
+        },
+      ],
+    };
   }
 
   function selectedHasFlag(flag: DayFlag) {
@@ -1135,6 +1151,16 @@
       </Card.Header>
       <Card.Content>
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div class="col-span-full rounded-md border bg-muted/30 px-2.5 py-2 text-center">
+            <div class="text-muted-foreground text-xs uppercase">Balance</div>
+            <div
+              class="mt-1 font-mono text-lg font-semibold tabular-nums"
+              class:text-destructive={monthStatsView.balanceSeconds < 0}
+              class:text-chart-1={monthStatsView.balanceSeconds > 0}
+            >
+              {signedHours(monthStatsView.balanceSeconds)}
+            </div>
+          </div>
           {#each statItems as item}
             <div class="rounded-md border bg-muted/30 px-2.5 py-2">
               <div class="text-muted-foreground text-xs uppercase">{item.label}</div>
