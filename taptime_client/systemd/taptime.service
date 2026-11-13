@@ -2,9 +2,13 @@
 Description=TapTime backend
 
 [Service]
+Type=simple
 ExecStart=%h/.local/bin/taptime-daemon
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=default.target

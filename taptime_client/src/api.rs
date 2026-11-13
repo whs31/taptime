@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Utc};
 use chrono_tz::Tz;
 use prost::Message;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -118,10 +118,12 @@ impl TapTimeClient {
     date: NaiveDate,
   ) -> Result<DashboardResponse> {
     let day = Date::from(date);
+    let first = NaiveDate::from_ymd_opt(date.year(), date.month(), 1)
+      .ok_or(ApiError::Missing("month start"))?;
     let request = DashboardRequest {
       range_start: Some(day),
       range_end: Some(day),
-      month_start: Some(day),
+      month_start: Some(Date::from(first)),
       month_end: Some(day),
       today: Some(day),
     };
@@ -291,10 +293,34 @@ pub struct TodaySnapshot {
   pub clocked_work: Duration,
   pub work_target: Duration,
   pub server_balance: Balance,
+  pub month_balance_closed: i64,
 }
 
 impl TodaySnapshot {
-  pub fn from_dashboard(dashboard: DashboardResponse, date: NaiveDate, zone: Tz) -> Result<Self> {
+  pub fn from_dashboard(
+    mut dashboard: DashboardResponse,
+    date: NaiveDate,
+    zone: Tz,
+  ) -> Result<Self> {
+    let stats = dashboard
+      .month_stats
+      .take()
+      .ok_or(ApiError::Missing("DashboardResponse.month_stats"))?;
+    let overtime = decode_worked_time(
+      stats
+        .overtime
+        .ok_or(ApiError::Missing("MonthlyStats.overtime"))?,
+    )?;
+    let undertime = decode_worked_time(
+      stats
+        .undertime
+        .ok_or(ApiError::Missing("MonthlyStats.undertime"))?,
+    )?;
+    let overtime =
+      i64::try_from(overtime.as_secs()).map_err(|_| ApiError::Wire("monthly duration overflow"))?;
+    let undertime = i64::try_from(undertime.as_secs())
+      .map_err(|_| ApiError::Wire("monthly duration overflow"))?;
+    let month_balance_closed = overtime.saturating_sub(undertime);
     let epoch_day = Date::from(date).days_since_epoch;
     let summary = dashboard
       .days
@@ -335,11 +361,73 @@ impl TodaySnapshot {
       clocked_work,
       work_target,
       server_balance,
+      month_balance_closed,
     })
+  }
+
+  pub fn first_check_in_text(&self) -> Option<String> {
+    self
+      .day
+      .first_check_in()
+      .map(|t| format!("{:02}:{:02}", t.hour, t.minute))
+  }
+
+  pub fn last_check_out_text(&self) -> Option<String> {
+    if self.is_active() {
+      return None;
+    }
+    self.day.events.iter().rev().find_map(|event| match event {
+      Event::CheckOut(t) => Some(format!("{:02}:{:02}", t.hour, t.minute)),
+      _ => None,
+    })
+  }
+
+  pub fn month_balance_at(&self, now: DateTime<Utc>) -> i64 {
+    let regular = !self
+      .day
+      .flags
+      .intersects(DayFlags::WEEKEND | DayFlags::DAY_OFF | DayFlags::VACATION | DayFlags::REMOTE);
+    if !regular || !self.is_active() || now.with_timezone(&self.time_zone).date_naive() != self.date
+    {
+      return self.month_balance_closed;
+    }
+    let signed = |balance: &Balance| match balance {
+      Balance::Exact => 0,
+      Balance::Overtime(d) => d.num_seconds(),
+      Balance::UnderTime(d) => -d.num_seconds(),
+    };
+    self
+      .month_balance_closed
+      .saturating_add(signed(&self.balance_at(now)).saturating_sub(signed(&self.server_balance)))
   }
 
   pub fn is_active(&self) -> bool {
     matches!(self.day.events.last(), Some(Event::CheckIn(_)))
+  }
+
+  fn elapsed_since(&self, start: &taptime_core::LocalTime, now: DateTime<Utc>) -> i64 {
+    self
+      .date
+      .and_hms_opt(start.hour, start.minute, start.second)
+      .and_then(|local| self.time_zone.from_local_datetime(&local).earliest())
+      .map(|start| (now - start.with_timezone(&Utc)).num_seconds().max(0))
+      .unwrap_or(0)
+  }
+
+  pub fn presence_at(&self, now: DateTime<Utc>) -> i64 {
+    if self.is_active() {
+      self
+        .day
+        .first_check_in()
+        .map(|start| self.elapsed_since(start, now))
+        .unwrap_or(0)
+    } else {
+      self
+        .day
+        .presence_duration()
+        .unwrap_or_default()
+        .num_seconds()
+    }
   }
 
   pub fn worked_at(&self, now: DateTime<Utc>) -> Duration {
@@ -348,10 +436,7 @@ impl TodaySnapshot {
       return worked;
     }
     if let Some(Event::CheckIn(start)) = self.day.events.last() {
-      let local = now.with_timezone(&self.time_zone).time();
-      let current_seconds = i64::from(local.num_seconds_from_midnight());
-      let start_seconds = i64::from(start.hour * 3600 + start.minute * 60 + start.second);
-      let seconds = current_seconds.saturating_sub(start_seconds).max(0);
+      let seconds = self.elapsed_since(start, now);
       worked = worked.saturating_add(Duration::from_secs(seconds as u64));
     }
     worked
@@ -370,15 +455,7 @@ impl TodaySnapshot {
       return self.server_balance;
     }
     if let Some(first) = self.day.first_check_in() {
-      let current_seconds = i64::from(
-        now
-          .with_timezone(&self.time_zone)
-          .time()
-          .num_seconds_from_midnight(),
-      );
-      let first_seconds = i64::from(first.hour * 3600 + first.minute * 60 + first.second);
-      let presence =
-        chrono::Duration::seconds(current_seconds.saturating_sub(first_seconds).max(0));
+      let presence = chrono::Duration::seconds(self.elapsed_since(first, now));
       Balance::calculate(presence, self.day.required_day_duration())
     } else {
       self.server_balance
@@ -403,6 +480,40 @@ mod tests {
     out.extend_from_slice(&(trailer.len() as u32).to_be_bytes());
     out.extend_from_slice(trailer.as_bytes());
     out
+  }
+
+  #[test]
+  fn daylight_saving_uses_elapsed_time() {
+    for (month, day, expected) in [(3, 29, 3600), (10, 25, 10800)] {
+      let date = NaiveDate::from_ymd_opt(2026, month, day).unwrap();
+      let zone = chrono_tz::Europe::Berlin;
+      let snapshot = TodaySnapshot {
+        date,
+        time_zone: zone,
+        day: Day {
+          date,
+          events: vec![Event::CheckIn(taptime_core::LocalTime {
+            hour: 1,
+            minute: 30,
+            second: 0,
+          })],
+          flags: DayFlags::empty(),
+          required_work_hours: chrono::Duration::hours(8),
+          lunch_break_duration: chrono::Duration::minutes(30),
+        },
+        clocked_work: Duration::ZERO,
+        work_target: Duration::from_secs(28800),
+        server_balance: Balance::Exact,
+        month_balance_closed: 0,
+      };
+      let now = zone
+        .from_local_datetime(&date.and_hms_opt(3, 30, 0).unwrap())
+        .single()
+        .unwrap()
+        .with_timezone(&Utc);
+      assert_eq!(snapshot.worked_at(now).as_secs(), expected as u64);
+      assert_eq!(snapshot.presence_at(now), expected);
+    }
   }
 
   #[test]
@@ -504,7 +615,17 @@ mod tests {
     };
     let dashboard = DashboardResponse {
       days: vec![summary],
-      month_stats: None,
+      month_stats: Some(taptime_schema::services::MonthlyStats {
+        overtime: Some(prost_types::Duration {
+          seconds: 0,
+          nanos: 0,
+        }),
+        undertime: Some(prost_types::Duration {
+          seconds: 0,
+          nanos: 0,
+        }),
+        ..Default::default()
+      }),
     };
     let snapshot = TodaySnapshot::from_dashboard(dashboard, date, chrono_tz::UTC).unwrap();
     let now = date.and_hms_opt(17, 30, 0).unwrap().and_utc();

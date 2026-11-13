@@ -1373,6 +1373,7 @@ dependencies = [
  "prost",
  "prost-types",
  "reqwest",
+ "serde",
  "serde_json",
  "taptime_core",
  "taptime_schema",

@@ -5,22 +5,29 @@ edition = "2024"
 publish = false
 
 [dependencies]
-taptime_core = { path = "../taptime_core" }
-taptime_schema = { path = "../taptime_schema", features = ["grpc"] }
-chrono = "0.4"
-chrono-tz = "0.10"
-prost = "0.14"
-prost-types = "0.14"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-thiserror = "2"
+taptime_core = { optional = true, path = "../taptime_core" }
+taptime_schema = { optional = true, path = "../taptime_schema", features = ["grpc"] }
+chrono = { version = "0.4", optional = true }
+chrono-tz = { version = "0.10", optional = true }
+prost = { version = "0.14", optional = true }
+prost-types = { version = "0.14", optional = true }
+reqwest = { optional = true, version = "0.12", default-features = false, features = ["rustls-tls"] }
+thiserror = { version = "2", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "time", "sync"] }
 serde_json = "1"
-libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+libc = { version = "0.2", optional = true }
 
 [[bin]]
 name = "taptime"
 path = "src/main.rs"
+required-features = ["backend"]
 
 [[bin]]
 name = "taptime-daemon"
 path = "src/bin/daemon.rs"
+required-features = ["backend"]
+
+[features]
+default = ["backend"]
+backend = ["dep:taptime_core", "dep:taptime_schema", "dep:chrono", "dep:chrono-tz", "dep:prost", "dep:prost-types", "dep:reqwest", "dep:thiserror", "dep:libc"]

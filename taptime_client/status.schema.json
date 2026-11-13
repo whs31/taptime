@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "TapTime IPC status v1",
-  "description": "Connect to $XDG_RUNTIME_DIR/taptime/status.sock; no request body. Server sends one JSON line and closes. Poll locally each second for live counters. Cache is in memory and resets on daemon restart. Stale counters are estimates.",
+  "description": "Connect to $XDG_RUNTIME_DIR/taptime/status.sock; server sends one JSON line and closes. Version 1. Successful snapshots cached in $XDG_STATE_HOME/taptime/status.json. Restarted snapshots are stale and frozen until sync. Monotonic extrapolation capped at 90 seconds. Unknown additive fields may be ignored.",
   "type": "object",
   "required": [
     "version",
@@ -89,6 +89,34 @@
     "active": {
       "type": "boolean",
       "description": "Open session on the current account-local date"
+    },
+    "local_time": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Account timezone RFC3339, used for notification quiet hours."
+    },
+    "month_balance_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Current month signed balance, including local estimation of today's open session"
+    },
+    "first_check_in": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "First check-in of the account-local day, formatted HH:MM"
+    },
+    "last_check_out": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Last check-out formatted HH:MM, null while session is open"
     }
   }
 }

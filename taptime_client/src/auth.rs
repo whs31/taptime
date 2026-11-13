@@ -97,10 +97,14 @@ pub fn save_session(session: &Session) -> io::Result<()> {
   if write_result.is_err() {
     let _ = fs::remove_file(&tmp);
   }
+  if write_result.is_ok() {
+    let _ = crate::storage::write("status.json", &serde_json::Value::Null);
+  }
   write_result
 }
 
 pub fn clear_session() -> io::Result<()> {
+  let _ = crate::storage::write("status.json", &serde_json::Value::Null);
   match fs::remove_file(session_path()?) {
     Ok(()) => Ok(()),
     Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
