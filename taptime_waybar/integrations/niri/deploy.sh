@@ -128,7 +128,7 @@ fi
 if command -v dms >/dev/null 2>&1; then
   printf '\n==> Install DankMaterialShell plugin\n'
   dms_plugin_source="taptime_waybar/integrations/niri/dms/taptime"
-  dms_plugin_dir="$config_home/DankMaterialShell/plugins/taptime"
+  dms_plugin_dir="$config_home/dms/plugins/taptime"
   if [[ -f "$dms_plugin_source/plugin.json" ]]; then
     if [[ -d "$dms_plugin_dir" ]]; then
       cp -a -- "$dms_plugin_dir" "$backup_dir/dms-taptime"
@@ -164,7 +164,7 @@ cat <<'NOTE'
 
 Rust backend and notifications installed.
 If DMS was detected, the TapTime widget plugin has been copied to
-~/.config/DankMaterialShell/plugins/taptime. In DMS Settings > Plugins,
+~/.config/dms/plugins/taptime. In DMS Settings > Plugins,
 scan and enable it, then add TapTime to DankBar. Run `dms restart` if
 it does not appear. Niri compositor settings were not changed.
 NOTE

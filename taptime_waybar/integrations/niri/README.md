@@ -10,7 +10,7 @@ Run from the TapTime repository root:
 bash taptime_waybar/integrations/niri/deploy.sh
 ```
 
-The deployment builds/install the Rust binaries and user systemd services, preserves existing `~/.config/taptime-waybar/config.toml`, and copies the DMS plugin to `~/.config/DankMaterialShell/plugins/taptime/` when `dms` is installed. Existing binaries, units and DMS plugin files are backed up in the printed backup directory. The script never removes TapTime login state. It does **not** modify Niri config or DMS bar layout.
+The deployment builds/install the Rust binaries and user systemd services, preserves existing `~/.config/taptime-waybar/config.toml`, and copies the DMS plugin to `~/.config/dms/plugins/taptime/` when `dms` is installed. Existing binaries, units and DMS plugin files are backed up in the printed backup directory. The script never removes TapTime login state. It does **not** modify Niri config or DMS bar layout.
 
 ## Enable widget
 
@@ -38,11 +38,11 @@ If status JSON reads `"error":"unauthenticated"`, sign in interactively using `~
 ## Manual plugin-only install
 
 ```sh
-mkdir -p ~/.config/DankMaterialShell/plugins/taptime
+mkdir -p ~/.config/dms/plugins/taptime
 cp -a taptime_waybar/integrations/niri/dms/taptime/. \
-  ~/.config/DankMaterialShell/plugins/taptime/
+  ~/.config/dms/plugins/taptime/
 cp taptime_waybar/integrations/niri/TapTimeStatus.qml \
-  ~/.config/DankMaterialShell/plugins/taptime/TapTimeStatus.qml
+  ~/.config/dms/plugins/taptime/TapTimeStatus.qml
 dms restart
 ```
 

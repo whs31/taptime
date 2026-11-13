@@ -3,14 +3,15 @@ import Quickshell
 import Quickshell.Io
 import qs.Common
 import qs.Widgets
+import qs.DCommon.Widgets as DCommon
 import qs.Modules.Plugins
 
 PluginComponent {
     id: root
     property var popoutService: null
 
-    readonly property var data: dataSource.status
-    readonly property bool ready: data.alt === "ready"
+    readonly property var taptime: dataSource.status
+    readonly property bool ready: taptime.alt === "ready"
 
     // DMS already owns the bar pill and the popout. We only supply content.
     // Left click is intercepted inside the pill to open the website;
@@ -38,15 +39,15 @@ PluginComponent {
                 anchors.centerIn: parent
                 spacing: Theme.spacingXS
 
-                DankIcon {
+                DCommon.DIcon {
                     name: "schedule"
                     color: root.ready ? Theme.widgetTextColor : Theme.surfaceVariantText
-                    font.pixelSize: root.iconSize
+                    size: root.iconSize
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 StyledText {
-                    text: root.data.worked + "  " + root.data.balance
+                    text: root.taptime.worked + "  " + root.taptime.balance
                     color: root.ready ? Theme.widgetTextColor : Theme.surfaceVariantText
                     font.pixelSize: root.textSize
                     anchors.verticalCenter: parent.verticalCenter
@@ -75,12 +76,12 @@ PluginComponent {
             implicitWidth: Math.max(icon.implicitWidth + Theme.spacingXS, 22)
             implicitHeight: Math.max(icon.implicitHeight + Theme.spacingXS, 22)
 
-            DankIcon {
+            DCommon.DIcon {
                 id: icon
                 anchors.centerIn: parent
                 name: "schedule"
                 color: root.ready ? Theme.widgetTextColor : Theme.surfaceVariantText
-                font.pixelSize: root.iconSize
+                size: root.iconSize
             }
 
             MouseArea {
@@ -104,7 +105,7 @@ PluginComponent {
         PopoutComponent {
             width: parent.width
             headerText: "TapTime"
-            detailsText: root.data.date || "Нет данных"
+            detailsText: root.taptime.date || "Нет данных"
 
             Column {
                 width: parent.width
@@ -112,26 +113,26 @@ PluginComponent {
 
                 TapTimeDetailRow {
                     label: "Начало — конец"
-                    value: (root.data.start_time || "—") + " — "
-                         + (root.data.active === true ? "В работе" : (root.data.end_time || "—"))
-                    highlight: root.data.active === true
+                    value: (root.taptime.start_time || "—") + " — "
+                         + (root.taptime.active === true ? "В работе" : (root.taptime.end_time || "—"))
+                    highlight: root.taptime.active === true
                 }
 
                 TapTimeDetailRow {
                     label: "Отработано"
-                    value: root.data.worked || "--:--"
+                    value: root.taptime.worked || "--:--"
                 }
 
                 TapTimeDetailRow {
                     label: "Баланс за день"
-                    value: root.data.balance || "--:--"
-                    highlight: root.data.balance_positive === true
+                    value: root.taptime.balance || "--:--"
+                    highlight: root.taptime.balance_positive === true
                 }
 
                 TapTimeDetailRow {
                     label: "Баланс за месяц"
-                    value: root.data.month_balance || "--:--"
-                    highlight: root.data.month_balance_positive === true
+                    value: root.taptime.month_balance || "--:--"
+                    highlight: root.taptime.month_balance_positive === true
                 }
 
                 StyledText {
