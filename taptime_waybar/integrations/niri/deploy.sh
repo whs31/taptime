@@ -14,7 +14,8 @@ Build and install:
 
 Preserves TapTime authentication, user settings and notification history.
 Backs up existing binaries, services and configuration before replacing them.
-Does NOT modify Niri config.kdl or your Quickshell panel.
+Does NOT modify Niri config.kdl. If DMS is installed, installs its
+TapTime plugin (you enable/add it through DMS Settings).
 HELP
 }
 
@@ -123,6 +124,26 @@ else
   printf 'Preserved existing config: %s\n' "$config_file"
 fi
 
+# DMS uses its own plugin format; do not reuse Omarchy QML.
+if command -v dms >/dev/null 2>&1; then
+  printf '\n==> Install DankMaterialShell plugin\n'
+  dms_plugin_source="taptime_waybar/integrations/niri/dms/taptime"
+  dms_plugin_dir="$config_home/DankMaterialShell/plugins/taptime"
+  if [[ -f "$dms_plugin_source/plugin.json" ]]; then
+    if [[ -d "$dms_plugin_dir" ]]; then
+      cp -a -- "$dms_plugin_dir" "$backup_dir/dms-taptime"
+    fi
+    mkdir -p -- "$dms_plugin_dir"
+    cp -a -- "$dms_plugin_source/." "$dms_plugin_dir/"
+    install -m644 -- "taptime_waybar/integrations/niri/TapTimeStatus.qml" \
+      "$dms_plugin_dir/TapTimeStatus.qml"
+    printf 'DMS plugin: %s\n' "$dms_plugin_dir"
+    printf 'Enable it in DMS Settings > Plugins and add TapTime to DankBar.\n'
+  else
+    printf 'DMS plugin source missing; skipping UI.\n' >&2
+  fi
+fi
+
 printf '\n==> Validate user configuration\n'
 "$bin_dir/taptime-waybar" config >/dev/null
 "$bin_dir/taptime-notifier" config >/dev/null
@@ -142,7 +163,8 @@ systemctl --user is-active taptime.service taptime-notifier.service
 cat <<'NOTE'
 
 Rust backend and notifications installed.
-Quickshell UI was NOT changed. Niri is a Wayland compositor, not a
-standard Quickshell plugin API. The QML adapter depends on which shell
-runs your bar (for example DMS, Noctalia, or custom Quickshell).
+If DMS was detected, the TapTime widget plugin has been copied to
+~/.config/DankMaterialShell/plugins/taptime. In DMS Settings > Plugins,
+scan and enable it, then add TapTime to DankBar. Run `dms restart` if
+it does not appear. Niri compositor settings were not changed.
 NOTE
