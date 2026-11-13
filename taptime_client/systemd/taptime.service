@@ -1,0 +1,10 @@
+[Unit]
+Description=TapTime backend
+
+[Service]
+ExecStart=%h/.local/bin/taptime-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

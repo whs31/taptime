@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TapTime IPC status v1",
+  "description": "Connect to $XDG_RUNTIME_DIR/taptime/status.sock; no request body. Server sends one JSON line and closes. Poll locally each second for live counters. Cache is in memory and resets on daemon restart. Stale counters are estimates.",
+  "type": "object",
+  "required": [
+    "version",
+    "sampled_at",
+    "last_sync",
+    "stale",
+    "error",
+    "date",
+    "worked_seconds",
+    "presence_seconds",
+    "work_target_seconds",
+    "presence_target_seconds",
+    "balance_seconds",
+    "active"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Protocol version, currently 1"
+    },
+    "sampled_at": {
+      "type": "string",
+      "description": "UTC RFC3339 time when counters were sampled"
+    },
+    "last_sync": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "UTC RFC3339 time of last successful API read"
+    },
+    "stale": {
+      "type": "boolean",
+      "description": "Failed synchronization, age over 90 seconds, or changed local date"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "unauthenticated, session_unavailable, api_unavailable or null"
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Account local YYYY-MM-DD; null before first sync"
+    },
+    "worked_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Closed work plus estimated current open session"
+    },
+    "presence_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Local wall-clock presence from first check-in"
+    },
+    "work_target_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Server work target"
+    },
+    "presence_target_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Core required day duration including lunch"
+    },
+    "balance_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Positive overtime, negative undertime; TapTime balance rules"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Open session on the current account-local date"
+    }
+  }
+}
