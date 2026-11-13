@@ -1,0 +1,8 @@
+{
+  "custom/taptime": {
+    "exec": "taptime-waybar watch",
+    "return-type": "json",
+    "restart-interval": 5,
+    "on-click": "taptime-waybar open"
+  }
+}

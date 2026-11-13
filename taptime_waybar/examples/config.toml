@@ -1,0 +1,107 @@
+[display]
+format = "{icon} {worked}  {balance}"
+icon = "󰥔"
+tooltip = """
+{date}
+{worked} / {work_target}
+{presence} / {presence_target}"""
+interval_ms = 1000
+dashboard_url = "https://time.whs31.com/dashboard"
+seconds = false
+hours = true
+minutes = true
+show_balance = true
+unavailable = "last"
+unavailable_text = "Daemon unavailable"
+active_text = "true"
+inactive_text = "false"
+stale_class = "stale"
+positive_class = "positive"
+inactive_class = "inactive"
+disconnected_class = "disconnected"
+positive = "+{value}"
+negative = "-{value}"
+
+
+[notifications]
+enabled = true
+language = "ru"
+missed_policy = "skip"
+stale_policy = "skip"
+notify_on_completion = false
+notify_on_overtime = false
+quiet_hours = []
+
+[notifications.options]
+persistent = true
+timeout_ms = 5000
+urgency = "normal"
+icon = "clock"
+sound = false
+sound_name = "message"
+action_url = ""
+
+[[notifications.thresholds]]
+id = "four-hours"
+remaining_minutes = 240
+enabled = true
+title = "TapTime"
+body = "До дневной цели осталось {remaining}. Отработано {worked}"
+weekdays = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+]
+
+[[notifications.thresholds]]
+id = "two-hours"
+remaining_minutes = 120
+enabled = true
+title = "TapTime"
+body = "До дневной цели осталось {remaining}. Отработано {worked}"
+weekdays = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+]
+
+[[notifications.thresholds]]
+id = "one-hour"
+remaining_minutes = 60
+enabled = true
+title = "TapTime"
+body = "До дневной цели осталось {remaining}. Отработано {worked}"
+weekdays = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+]
+
+[[notifications.thresholds]]
+id = "half-hour"
+remaining_minutes = 30
+enabled = true
+title = "TapTime"
+body = "До дневной цели осталось {remaining}. Отработано {worked}"
+weekdays = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+]
+
