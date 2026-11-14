@@ -1,0 +1,337 @@
+version = 1
+object = "TapTimeSdk"
+dto_file = "rust/src/contracts.rs"
+error_file = "rust/src/errors.rs"
+
+[semantics]
+work_override = "None removes override; Some(0) sets explicit zero; verified store.rs set_required_work_hours_override"
+date = "YYYY-MM-DD; validated Gregorian date"
+duration = "i64 seconds; negative balance is undertime"
+local_time = "i64 seconds since local midnight, 0..86399; timeline endpoint may exceed 86400"
+timestamp = "i64 Unix seconds"
+time_zone = "validated IANA identifier"
+uuid = "validated UUID string"
+rfid = "optional hexadecimal string encoding 4, 7 or 10 bytes"
+absence = "Option; never a sentinel zero"
+ranges = "inclusive dates; range_start <= range_end; month bounds independently validated"
+time_model = "Server stores date plus wall-clock time, without UTC offset or DST fold. Match taptime_core wall-clock arithmetic. Do not infer elapsed UTC duration or join separate days into an invented overnight session. Ambiguous DST instants cannot be recovered from stored events."
+balance = "Server/core balance uses presence against required day duration including lunch, not merely sum of work sessions. Preserve skipped, before_start_date, override and work_target semantics from DaySummary."
+live_time = "Convert explicit now_unix_seconds to user time zone; extend only an open session on the current local date. Historical open sessions have no invented checkout."
+report = "Aggregate provided DaySummary values; reject duplicate dates or out-of-range days. Do not replace absent server days with fabricated work."
+timeline = "WorkDay starts at first check-in and ends at required completion including lunch; overtime separate. CalendarDay spans 0..86400. No first check-in means empty segments."
+mutations = "Never automatically retry writes, including toggle. Timeout or transport failure after dispatch means outcome unknown; reconcile by reading before another user-authorized attempt. No atomic event edit exists."
+runtime = "One managed Tokio runtime/client lifecycle; async UniFFI exports; token held only in memory"
+
+[error]
+name = "SdkError"
+derive = "thiserror::Error, uniffi::Error"
+variant = "Failure"
+fields = { code = "SdkErrorCode", message = "String", retryable = "bool", mutation_outcome_unknown = "bool" }
+semantics = "Structured enum error with fields, not flat_error. retryable allows safe reads only; unknown mutation must have retryable=false. Sanitize messages; never expose tokens/passwords."
+
+[dto.AuthResult]
+token = "String"
+user = "UserDto"
+
+[dto.RegisterInput]
+name = "String"
+email = "String"
+password = "String"
+organization = "Option<String>"
+time_zone = "String"
+settings = "UserSettingsDto"
+
+[dto.UserDto]
+id = "String"
+name = "String"
+email = "String"
+organization = "Option<String>"
+time_zone = "String"
+created_at = "i64"
+last_seen = "Option<i64>"
+rfid_uid = "Option<String>"
+settings = "UserSettingsDto"
+
+[dto.UserSettingsDto]
+required_work_seconds = "i64"
+lunch_seconds = "i64"
+weekends = "Vec<Weekday>"
+remote_days = "Vec<Weekday>"
+start_date = "Option<String>"
+
+[dto.DashboardQuery]
+range_start = "String"
+range_end = "String"
+month_start = "String"
+month_end = "String"
+today = "String"
+
+[dto.DashboardDto]
+days = "Vec<DaySummaryDto>"
+month_stats = "MonthStatsDto"
+
+[dto.DayDto]
+date = "String"
+events = "Vec<EventDto>"
+flags = "Vec<DayFlag>"
+required_work_seconds = "i64"
+lunch_seconds = "i64"
+
+[dto.DaySummaryDto]
+day = "DayDto"
+clocked_work_seconds = "i64"
+balance_seconds = "i64"
+skipped = "bool"
+full_day_worked = "bool"
+required_work_hours_overridden = "bool"
+work_target_seconds = "i64"
+before_start_date = "bool"
+
+[dto.EventDto]
+id = "String"
+kind = "EventKind"
+local_seconds = "i64"
+
+[dto.WorkSessionDto]
+start_seconds = "i64"
+end_seconds = "Option<i64>"
+worked_seconds = "i64"
+
+[dto.MonthStatsDto]
+total_clocked_work_seconds = "i64"
+overtime_seconds = "i64"
+undertime_seconds = "i64"
+worked_days = "u32"
+remote_days = "u32"
+day_offs = "u32"
+vacation_days = "u32"
+skipped_days = "u32"
+full_weekend_work_days = "u32"
+full_vacation_work_days = "u32"
+
+[dto.DayMetricsDto]
+date = "String"
+is_working = "bool"
+worked_seconds = "i64"
+required_work_seconds = "i64"
+presence_seconds = "Option<i64>"
+balance_seconds = "i64"
+remaining_seconds = "i64"
+first_check_in_seconds = "Option<i64>"
+last_check_out_seconds = "Option<i64>"
+expected_end_seconds = "Option<i64>"
+sessions = "Vec<WorkSessionDto>"
+
+[dto.TimelineDto]
+mode = "TimelineMode"
+axis_start_seconds = "i64"
+axis_end_seconds = "i64"
+now_seconds = "Option<i64>"
+segments = "Vec<TimelineSegmentDto>"
+overtime_seconds = "i64"
+
+[dto.TimelineSegmentDto]
+kind = "TimelineSegmentKind"
+start_seconds = "i64"
+end_seconds = "i64"
+
+[dto.ReportDto]
+range_start = "String"
+range_end = "String"
+worked_seconds = "i64"
+planned_seconds = "i64"
+balance_seconds = "i64"
+overtime_seconds = "i64"
+undertime_seconds = "i64"
+months = "Vec<MonthBucketDto>"
+daily_balance = "Vec<DailyBalancePointDto>"
+exceptions = "ExceptionDto"
+distribution = "WorkDistributionDto"
+
+[dto.MonthBucketDto]
+month_start = "String"
+worked_seconds = "i64"
+planned_seconds = "i64"
+balance_seconds = "i64"
+overtime_seconds = "i64"
+undertime_seconds = "i64"
+
+[dto.DailyBalancePointDto]
+date = "String"
+balance_seconds = "i64"
+cumulative_balance_seconds = "i64"
+
+[dto.ExceptionDto]
+remote_days = "u32"
+day_offs = "u32"
+vacation_days = "u32"
+skipped_days = "u32"
+full_weekend_work_days = "u32"
+full_vacation_work_days = "u32"
+
+[dto.WorkDistributionDto]
+working_days = "u32"
+non_working_days = "u32"
+worked_days = "u32"
+overtime_days = "u32"
+undertime_days = "u32"
+
+[dto.EventInput]
+date = "String"
+local_seconds = "i64"
+
+[dto.FlagInput]
+date = "String"
+flag = "DayFlag"
+
+[dto.WorkOverrideInput]
+date = "String"
+required_work_seconds = "Option<i64>"
+
+[dto.ProfileInput]
+name = "String"
+email = "String"
+organization = "Option<String>"
+
+[dto.SettingsInput]
+time_zone = "String"
+settings = "UserSettingsDto"
+
+[dto.DayCalculationInput]
+day = "DayDto"
+time_zone = "String"
+now_unix_seconds = "i64"
+work_target_seconds = "i64"
+before_start_date = "bool"
+
+[dto.TimelineInput]
+calculation = "DayCalculationInput"
+mode = "TimelineMode"
+
+[dto.ReportInput]
+range_start = "String"
+range_end = "String"
+days = "Vec<DaySummaryDto>"
+
+[enum.EventKind]
+variants = ["CheckIn", "CheckOut"]
+
+[enum.DayFlag]
+variants = ["Weekend", "DayOff", "Remote", "Vacation"]
+
+[enum.Weekday]
+variants = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+[enum.TimelineMode]
+variants = ["WorkDay", "CalendarDay"]
+
+[enum.TimelineSegmentKind]
+variants = ["Work", "Break", "Overtime"]
+
+[enum.SdkErrorCode]
+variants = ["InvalidInput", "Unauthenticated", "PermissionDenied", "NotFound", "Conflict", "Unavailable", "Timeout", "InvalidResponse", "Internal"]
+
+[method.new]
+arguments = "endpoint: String"
+returns = "Result<Arc<TapTimeSdk>, SdkError>"
+async = false
+
+[method.login]
+arguments = "email: String, password: String"
+returns = "Result<AuthResult, SdkError>"
+async = true
+
+[method.register]
+arguments = "input: RegisterInput"
+returns = "Result<AuthResult, SdkError>"
+async = true
+
+[method.set_session_token]
+arguments = "token: String"
+returns = "Result<(), SdkError>"
+async = false
+
+[method.clear_session_token]
+arguments = ""
+returns = "()"
+async = false
+
+[method.fetch_user]
+arguments = ""
+returns = "Result<UserDto, SdkError>"
+async = true
+
+[method.fetch_day]
+arguments = "date: String"
+returns = "Result<DayDto, SdkError>"
+async = true
+
+[method.fetch_dashboard]
+arguments = "query: DashboardQuery"
+returns = "Result<DashboardDto, SdkError>"
+async = true
+
+[method.check_in]
+arguments = "input: EventInput"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.check_out]
+arguments = "input: EventInput"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.delete_event]
+arguments = "event_id: String"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.toggle_day_flag]
+arguments = "input: FlagInput"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.set_work_override]
+arguments = "input: WorkOverrideInput"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.update_profile]
+arguments = "input: ProfileInput"
+returns = "Result<UserDto, SdkError>"
+async = true
+
+[method.update_settings]
+arguments = "input: SettingsInput"
+returns = "Result<UserDto, SdkError>"
+async = true
+
+[method.update_rfid]
+arguments = "uid: Option<String>"
+returns = "Result<UserDto, SdkError>"
+async = true
+
+[method.delete_time_data]
+arguments = ""
+returns = "Result<(), SdkError>"
+async = true
+
+[method.delete_account]
+arguments = "password: String"
+returns = "Result<(), SdkError>"
+async = true
+
+[method.calculate_day]
+arguments = "input: DayCalculationInput"
+returns = "Result<DayMetricsDto, SdkError>"
+async = false
+
+[method.build_timeline]
+arguments = "input: TimelineInput"
+returns = "Result<TimelineDto, SdkError>"
+async = false
+
+[method.build_report]
+arguments = "input: ReportInput"
+returns = "Result<ReportDto, SdkError>"
+async = false

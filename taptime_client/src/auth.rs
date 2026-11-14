@@ -1,9 +1,12 @@
-#[cfg(unix)]
+use std::io;
+
+#[cfg(all(unix, feature = "backend"))]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+#[cfg(feature = "backend")]
 use std::{
   env,
   fs::{self, OpenOptions},
-  io::{self, Write},
+  io::Write,
   path::PathBuf,
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -33,6 +36,7 @@ pub struct LoginResult {
   pub user: User,
 }
 
+#[cfg(feature = "backend")]
 pub fn session_path() -> io::Result<PathBuf> {
   let data = match env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
     Some(path) => PathBuf::from(path),
@@ -45,6 +49,7 @@ pub fn session_path() -> io::Result<PathBuf> {
   Ok(data.join("taptime-client/session.jwt"))
 }
 
+#[cfg(feature = "backend")]
 pub fn load_session() -> io::Result<Option<Session>> {
   let path = session_path()?;
   let metadata = match fs::symlink_metadata(&path) {
@@ -69,6 +74,7 @@ pub fn load_session() -> io::Result<Option<Session>> {
   Session::new(jwt.trim_end_matches(&['\r', '\n'][..]).to_owned()).map(Some)
 }
 
+#[cfg(feature = "backend")]
 pub fn save_session(session: &Session) -> io::Result<()> {
   let path = session_path()?;
   let dir = path
@@ -103,6 +109,7 @@ pub fn save_session(session: &Session) -> io::Result<()> {
   write_result
 }
 
+#[cfg(feature = "backend")]
 pub fn clear_session() -> io::Result<()> {
   let _ = crate::storage::write("status.json", &serde_json::Value::Null);
   match fs::remove_file(session_path()?) {

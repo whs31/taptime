@@ -55,6 +55,56 @@ pub fn decode_worked_time(
   remote.try_into()
 }
 
+pub struct RegisterRequest {
+  pub profile: ProfileUpdate,
+  pub settings: SettingsUpdate,
+  pub password: String,
+}
+
+pub struct DashboardRange {
+  pub range_start: NaiveDate,
+  pub range_end: NaiveDate,
+  pub month_start: NaiveDate,
+  pub month_end: NaiveDate,
+  pub today: NaiveDate,
+}
+
+pub struct EventRequest {
+  pub date: NaiveDate,
+  pub time: taptime_core::LocalTime,
+}
+
+pub struct FlagRequest {
+  pub date: NaiveDate,
+  pub flag: taptime_schema::DayFlag,
+}
+
+pub struct WorkOverrideRequest {
+  pub date: NaiveDate,
+  pub required_work_hours: Option<Duration>,
+}
+
+pub struct ProfileUpdate {
+  pub name: String,
+  pub email: String,
+  pub organization: Option<String>,
+}
+
+pub struct SettingsUpdate {
+  pub time_zone: Tz,
+  pub required_work_hours: Duration,
+  pub lunch_break_duration: Duration,
+  pub weekends: Vec<taptime_schema::Weekday>,
+  pub remote_days: Vec<taptime_schema::Weekday>,
+  pub start_date: Option<NaiveDate>,
+}
+
+fn encode_duration(value: Duration) -> Result<prost_types::Duration> {
+  value
+    .try_into()
+    .map_err(|_| ApiError::Wire("duration out of range"))
+}
+
 #[derive(Clone)]
 pub struct TapTimeClient {
   http: reqwest::Client,
@@ -168,6 +218,247 @@ impl TapTimeClient {
     let today = sampled_at.with_timezone(&zone).date_naive();
     let dashboard = self.get_dashboard(session, today).await?;
     TodaySnapshot::from_dashboard(dashboard, today, zone)
+  }
+
+  pub async fn register(&self, input: RegisterRequest) -> Result<LoginResult> {
+    use taptime_schema::{services::RegisterUserRequest, user};
+    let settings = input.settings;
+    let request = RegisterUserRequest {
+      user: Some(User {
+        name: input.profile.name,
+        email: input.profile.email,
+        organization: input.profile.organization,
+        time_zone: Some(taptime_schema::Tz {
+          time_zone: settings.time_zone.name().to_owned(),
+        }),
+        settings: Some(user::Settings {
+          required_work_hours: Some(encode_duration(settings.required_work_hours)?),
+          lunch_break_duration: Some(encode_duration(settings.lunch_break_duration)?),
+          weekends: settings.weekends.into_iter().map(|v| v as i32).collect(),
+          remote_days: settings.remote_days.into_iter().map(|v| v as i32).collect(),
+          start_date: settings.start_date.map(Date::from),
+        }),
+        ..Default::default()
+      }),
+      password: input.password,
+    };
+    let response: AuthResponse = self
+      .unary(
+        "AuthService",
+        "RegisterUser",
+        &request.encode_to_vec(),
+        None,
+      )
+      .await?;
+    Ok(LoginResult {
+      session: Session::new(response.jwt)?,
+      user: response
+        .user
+        .ok_or(ApiError::Missing("AuthResponse.user"))?,
+    })
+  }
+
+  pub async fn get_day(&self, session: &Session, date: NaiveDate) -> Result<taptime_schema::Day> {
+    self
+      .unary(
+        "StoreService",
+        "GetDay",
+        &Date::from(date).encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn get_balance(&self, session: &Session, date: NaiveDate) -> Result<Balance> {
+    let balance: taptime_schema::Balance = self
+      .unary(
+        "StoreService",
+        "GetBalance",
+        &Date::from(date).encode_to_vec(),
+        Some(session),
+      )
+      .await?;
+    Ok(Balance::try_from(&balance)?)
+  }
+
+  pub async fn get_dashboard_range(
+    &self,
+    session: &Session,
+    range: DashboardRange,
+  ) -> Result<DashboardResponse> {
+    if range.range_start > range.range_end || range.month_start > range.month_end {
+      return Err(ApiError::Wire("invalid dashboard range"));
+    }
+    let request = DashboardRequest {
+      range_start: Some(range.range_start.into()),
+      range_end: Some(range.range_end.into()),
+      month_start: Some(range.month_start.into()),
+      month_end: Some(range.month_end.into()),
+      today: Some(range.today.into()),
+    };
+    self
+      .unary(
+        "StoreService",
+        "GetDashboard",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn add_check_in(&self, session: &Session, input: EventRequest) -> Result<()> {
+    self.send_event(session, input, "AddCheckIn").await
+  }
+
+  pub async fn add_check_out(&self, session: &Session, input: EventRequest) -> Result<()> {
+    self.send_event(session, input, "AddCheckOut").await
+  }
+
+  async fn send_event(&self, session: &Session, input: EventRequest, method: &str) -> Result<()> {
+    taptime_core::LocalTime::new(input.time.hour, input.time.minute, input.time.second)?;
+    let request = taptime_schema::services::EventRequest {
+      date: Some(input.date.into()),
+      time: Some(taptime_schema::LocalTime {
+        hour: input.time.hour,
+        minute: input.time.minute,
+        second: input.time.second,
+      }),
+    };
+    self
+      .unary(
+        "StoreService",
+        method,
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn delete_event(
+    &self,
+    session: &Session,
+    event_id: taptime_schema::Uuid,
+  ) -> Result<()> {
+    let request = taptime_schema::services::DeleteEventRequest {
+      event_id: Some(event_id),
+    };
+    self
+      .unary(
+        "StoreService",
+        "DeleteEvent",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn toggle_day_flag(&self, session: &Session, input: FlagRequest) -> Result<()> {
+    let request = taptime_schema::services::SetFlagRequest {
+      date: Some(input.date.into()),
+      flag: input.flag as i32,
+    };
+    self
+      .unary(
+        "StoreService",
+        "SetFlag",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn set_work_override(
+    &self,
+    session: &Session,
+    input: WorkOverrideRequest,
+  ) -> Result<()> {
+    let request = taptime_schema::services::SetRequiredWorkHoursOverrideRequest {
+      date: Some(input.date.into()),
+      required_work_hours: input.required_work_hours.map(encode_duration).transpose()?,
+    };
+    self
+      .unary(
+        "StoreService",
+        "SetRequiredWorkHoursOverride",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn update_profile(&self, session: &Session, input: ProfileUpdate) -> Result<User> {
+    let request = taptime_schema::services::UpdateProfileRequest {
+      name: input.name,
+      email: input.email,
+      organization: input.organization,
+    };
+    self
+      .unary(
+        "AuthService",
+        "UpdateProfile",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn update_settings(&self, session: &Session, input: SettingsUpdate) -> Result<User> {
+    let request = taptime_schema::services::UpdateSettingsRequest {
+      time_zone: Some(taptime_schema::Tz {
+        time_zone: input.time_zone.name().to_owned(),
+      }),
+      required_work_hours: Some(encode_duration(input.required_work_hours)?),
+      lunch_break_duration: Some(encode_duration(input.lunch_break_duration)?),
+      weekends: input.weekends.into_iter().map(|v| v as i32).collect(),
+      remote_days: input.remote_days.into_iter().map(|v| v as i32).collect(),
+      start_date: input.start_date.map(Date::from),
+    };
+    self
+      .unary(
+        "AuthService",
+        "UpdateSettings",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn update_rfid(
+    &self,
+    session: &Session,
+    uid: Option<taptime_core::Uid>,
+  ) -> Result<User> {
+    let request = taptime_schema::services::UpdateRfidUidRequest {
+      rfid_uid: uid.map(|v| taptime_schema::Uid {
+        value: v.as_bytes().to_vec(),
+      }),
+    };
+    self
+      .unary(
+        "AuthService",
+        "UpdateRfidUid",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
+  }
+
+  pub async fn delete_time_data(&self, session: &Session) -> Result<()> {
+    self
+      .unary("AuthService", "DeleteTimeData", &[], Some(session))
+      .await
+  }
+
+  pub async fn delete_account(&self, session: &Session, password: String) -> Result<()> {
+    let request = taptime_schema::services::DeleteAccountRequest { password };
+    self
+      .unary(
+        "AuthService",
+        "DeleteAccount",
+        &request.encode_to_vec(),
+        Some(session),
+      )
+      .await
   }
 
   async fn unary<T: Message + Default>(

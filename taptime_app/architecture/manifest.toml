@@ -1,0 +1,662 @@
+version = 1
+status = "frozen"
+
+[[files]]
+path = "AGENTS.md"
+purpose = "Правила работы над Android-модулем и соблюдения утверждённой архитектуры"
+declarations = []
+
+[[files]]
+path = "ARCHITECTURE.md"
+purpose = "Границы компонентов, серверная семантика времени и известные ограничения реализации"
+declarations = []
+
+[[files]]
+path = "README.md"
+purpose = "Название приложения и поддерживаемые команды сборки, проверки и запуска"
+declarations = []
+
+[[files]]
+path = ".gitignore"
+purpose = "Исключения генерируемых bindings, сборок, локальных настроек и секретов из Git"
+declarations = []
+
+[[files]]
+path = "settings.gradle.kts"
+purpose = "Подключение Android-подпроекта и репозиториев Gradle plugins и dependencies"
+declarations = []
+
+[[files]]
+path = "build.gradle.kts"
+purpose = "Настройка Android application, Kotlin/Compose, ABI, UniFFI генерации, сборки Rust и архитектурных проверок"
+declarations = []
+
+[[files]]
+path = "gradle.properties"
+purpose = "Параметры Gradle JVM, Android и Kotlin для воспроизводимой сборки"
+declarations = []
+
+[[files]]
+path = "gradlew"
+purpose = "Unix launcher закреплённой версии Gradle Wrapper"
+declarations = []
+
+[[files]]
+path = "gradlew.bat"
+purpose = "Windows launcher закреплённой версии Gradle Wrapper"
+declarations = []
+
+[[files]]
+path = "gradle/libs.versions.toml"
+purpose = "Закреплённые версии Android, Kotlin, Compose, Room, WorkManager и тестовых зависимостей"
+declarations = []
+
+[[files]]
+path = "gradle/wrapper/gradle-wrapper.jar"
+purpose = "Исполняемый Gradle Wrapper для загрузки закреплённого Gradle"
+declarations = []
+
+[[files]]
+path = "gradle/wrapper/gradle-wrapper.properties"
+purpose = "URL и параметры проверки дистрибутива Gradle Wrapper"
+declarations = []
+
+[[files]]
+path = "architecture/manifest.toml"
+purpose = "Разрешённые пути, назначения и основные объявления архитектурных файлов"
+declarations = []
+
+[[files]]
+path = "architecture/api-contract.toml"
+purpose = "Публичные методы SDK, DTO, ошибки и неизменяемая семантика FFI"
+declarations = []
+
+[[files]]
+path = "architecture/check_structure.py"
+purpose = "Проверка отсутствующих и лишних файлов, основных объявлений и целостности зафиксированного контракта"
+declarations = []
+
+[[files]]
+path = "rust/Cargo.toml"
+purpose = "Rust Android SDK crate, UniFFI и переносимый taptime_client с feature api"
+declarations = []
+
+[[files]]
+path = "rust/Cargo.lock"
+purpose = "Закрепление графа зависимостей Rust SDK"
+declarations = []
+
+[[files]]
+path = "rust/uniffi.toml"
+purpose = "Параметры Kotlin bindings и имени Android native library"
+declarations = []
+
+[[files]]
+path = "rust/src/lib.rs"
+purpose = "Регистрация UniFFI scaffolding и экспорт модулей SDK"
+declarations = []
+
+[[files]]
+path = "rust/src/sdk.rs"
+purpose = "TapTimeSdk: единственный сетевой клиент, память сессии и асинхронные серверные операции"
+declarations = ["TapTimeSdk"]
+
+[[files]]
+path = "rust/src/contracts.rs"
+purpose = "Все публичные DTO и перечисления SDK без дублирования ручными Kotlin DTO"
+declarations = ["AuthResult", "RegisterInput", "UserDto", "UserSettingsDto", "DashboardQuery", "DashboardDto", "DayDto", "DaySummaryDto", "EventDto", "WorkSessionDto", "MonthStatsDto", "DayMetricsDto", "TimelineDto", "TimelineSegmentDto", "ReportDto", "MonthBucketDto", "DailyBalancePointDto", "ExceptionDto", "WorkDistributionDto", "EventInput", "FlagInput", "WorkOverrideInput", "ProfileInput", "SettingsInput", "DayCalculationInput", "TimelineInput", "ReportInput", "EventKind", "DayFlag", "Weekday", "TimelineMode", "TimelineSegmentKind", "SdkErrorCode"]
+
+[[files]]
+path = "rust/src/mapper.rs"
+purpose = "Валидация и преобразование реальных Protobuf сообщений в DTO SDK"
+declarations = ["ProtoMapper"]
+
+[[files]]
+path = "rust/src/clock.rs"
+purpose = "Дневные метрики и живое время по семантике taptime_core и часовому поясу пользователя"
+declarations = ["WorkClock"]
+
+[[files]]
+path = "rust/src/timeline.rs"
+purpose = "Сегменты работы, перерывов и переработки в режимах рабочего и календарного дня"
+declarations = ["TimelineCalculator"]
+
+[[files]]
+path = "rust/src/reports.rs"
+purpose = "Агрегация серверных дневных сводок в месячные показатели, баланс и исключения"
+declarations = ["ReportCalculator"]
+
+[[files]]
+path = "rust/src/errors.rs"
+purpose = "Ошибки SDK с кодом, безопасным сообщением и явной неопределённостью результата мутации"
+declarations = ["SdkError"]
+
+[[files]]
+path = "rust/tests/sdk_contract.rs"
+purpose = "Проверки публичных методов SDK, валидации запросов и жизненного цикла сессии"
+declarations = []
+
+[[files]]
+path = "rust/tests/dto_mapping.rs"
+purpose = "Проверки Protobuf/DTO преобразований, Option, UUID, дат и длительностей"
+declarations = []
+
+[[files]]
+path = "rust/tests/time_semantics.rs"
+purpose = "Рабочие сессии, открытые дни, полночь, DST, часовые пояса и серверная семантика времени"
+declarations = []
+
+[[files]]
+path = "rust/tests/timeline_modes.rs"
+purpose = "Оси WORK_DAY/CALENDAR_DAY, перерывы, переработка и отсутствие первого входа"
+declarations = []
+
+[[files]]
+path = "rust/tests/report_parity.rs"
+purpose = "Соответствие агрегаций отчётов реальным правилам веб-клиента и сервера"
+declarations = []
+
+[[files]]
+path = "rust/tests/mutation_safety.rs"
+purpose = "Локальные тесты отказов, таймаутов и отсутствия автоматического повторения записей"
+declarations = []
+
+[[files]]
+path = "app/src/main/AndroidManifest.xml"
+purpose = "Компоненты Android, разрешение сети, семь widget receivers и безопасная политика backup"
+declarations = []
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/TapTimeApplication.kt"
+purpose = "Инициализация единственного AppContainer и общей инфраструктуры приложения"
+declarations = ["TapTimeApplication"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/MainActivity.kt"
+purpose = "Точка запуска Compose UI и интеграция жизненного цикла Activity"
+declarations = ["MainActivity"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/AppContainer.kt"
+purpose = "Ручная сборка gateway, repositories, координаторов и Android dependencies"
+declarations = ["AppContainer"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/TapTimeGateway.kt"
+purpose = "Единый интерфейс Android к Rust SDK со сгенерированными UniFFI DTO"
+declarations = ["TapTimeGateway"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/RustTapTimeGateway.kt"
+purpose = "Адаптер TapTimeGateway к сгенерированным UniFFI bindings без собственного сетевого API"
+declarations = ["RustTapTimeGateway"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/SessionRepository.kt"
+purpose = "Вход, регистрация, восстановление и очистка сессии, обработка истёкшего токена"
+declarations = ["SessionRepository"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/WorkRepository.kt"
+purpose = "Состояние текущего дня, получение метрик SDK и обновление кеша работы"
+declarations = ["WorkRepository"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/HistoryRepository.kt"
+purpose = "Загрузка выбранных дней и диапазонов истории с кешированием"
+declarations = ["HistoryRepository"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/ReportRepository.kt"
+purpose = "Получение диапазонов и построение отчётов через Rust SDK"
+declarations = ["ReportRepository"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/AccountRepository.kt"
+purpose = "Профиль, настройки, RFID и подтверждаемые удаления аккаунта и данных"
+declarations = ["AccountRepository"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/CacheDatabase.kt"
+purpose = "Room database чувствительного кеша с очисткой при logout"
+declarations = ["CacheDatabase"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/CacheEntities.kt"
+purpose = "Room entities снимков данных без токенов и паролей"
+declarations = ["CacheEntities"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/SnapshotDao.kt"
+purpose = "Room DAO чтения, записи, наблюдения и очистки снимков"
+declarations = ["SnapshotDao"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/TokenStore.kt"
+purpose = "Интерфейс защищённого чтения, сохранения и удаления сессионного токена"
+declarations = ["TokenStore"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/KeystoreTokenStore.kt"
+purpose = "Шифрование сессионного токена ключом Android Keystore и безопасное удаление"
+declarations = ["KeystoreTokenStore"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/data/AppPreferences.kt"
+purpose = "Локальные предпочтения темы, Timeline и энергопотребления"
+declarations = ["AppPreferences"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/domain/WorkActionCoordinator.kt"
+purpose = "Единая сериализация действий UI и виджетов с защитой повторного нажатия и неопределённых мутаций"
+declarations = ["WorkActionCoordinator"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/domain/WorkClockTicker.kt"
+purpose = "Минутные сигналы локального пересчёта Rust метрик при активном UI"
+declarations = ["WorkClockTicker"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/domain/TimelineMode.kt"
+purpose = "Android предпочтение режима шкалы рабочего или календарного дня"
+declarations = ["TimelineMode"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/sync/PowerPolicy.kt"
+purpose = "Интервалы синхронизации и перерисовки с учётом foreground и Battery Saver"
+declarations = ["PowerPolicy"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/sync/SyncCoordinator.kt"
+purpose = "Общая координация загрузки снимков без дублирования одновременных запросов"
+declarations = ["SyncCoordinator"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/sync/SyncScheduler.kt"
+purpose = "Планирование уникальной фоновой синхронизации WorkManager с ограничениями сети и питания"
+declarations = ["SyncScheduler"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/sync/DashboardSyncWorker.kt"
+purpose = "Фоновое получение dashboard через общий контейнер и обновление виджетов"
+declarations = ["DashboardSyncWorker"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/TapTimeApp.kt"
+purpose = "Compose оболочка с состоянием авторизации и адаптивной навигацией"
+declarations = ["TapTimeApp"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/TapTimeNavHost.kt"
+purpose = "Маршруты авторизации, Сегодня, Истории, Отчётов, Настроек и Профиля"
+declarations = ["TapTimeNavHost"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/TapTimeTheme.kt"
+purpose = "Material 3, системная тема и Dynamic Color на поддерживаемых Android"
+declarations = ["TapTimeTheme"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/WorkStatusCard.kt"
+purpose = "Статус работы, готовые метрики и доступные действия текущего дня"
+declarations = ["WorkStatusCard"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/DayProgressRing.kt"
+purpose = "Доступное кольцевое представление готового дневного прогресса"
+declarations = ["DayProgressRing"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/DayTimelineChart.kt"
+purpose = "Compose визуализация рассчитанных Rust сегментов рабочего дня"
+declarations = ["DayTimelineChart"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/MonthBalanceChart.kt"
+purpose = "График рассчитанного накопленного месячного баланса"
+declarations = ["MonthBalanceChart"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/MonthRingChart.kt"
+purpose = "Кольцо месячного плана, отработанного времени и отклонений"
+declarations = ["MonthRingChart"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/WorkSessionList.kt"
+purpose = "Список готовых рабочих сессий, событий и незакрытых интервалов"
+declarations = ["WorkSessionList"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/EventEditorSheet.kt"
+purpose = "Ввод даты, времени и типа события для поддерживаемых операций без фиктивной атомарности"
+declarations = ["EventEditorSheet"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/components/ConfirmActionDialog.kt"
+purpose = "Явное подтверждение удаления событий, данных и аккаунта"
+declarations = ["ConfirmActionDialog"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetKind.kt"
+purpose = "Семь типов домашнего виджета и соответствующая идентификация"
+declarations = ["WidgetKind"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetState.kt"
+purpose = "Состояние отображения виджета, загрузки, ошибки и отсутствия сессии"
+declarations = ["WidgetState"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetPreferences.kt"
+purpose = "Настройки отдельных appWidgetId, включая независимый режим Timeline"
+declarations = ["WidgetPreferences"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetRenderer.kt"
+purpose = "RemoteViews с готовыми метриками, Chronometer и PendingIntent действий"
+declarations = ["WidgetRenderer"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetChartPainter.kt"
+purpose = "Canvas bitmap диаграмм дня, баланса и месячного прогресса"
+declarations = ["WidgetChartPainter"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetUpdateCoordinator.kt"
+purpose = "Обновление всех экземпляров виджетов после снимков, мутаций и logout"
+declarations = ["WidgetUpdateCoordinator"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetConfigurationActivity.kt"
+purpose = "Первичная и повторная настройка конкретного экземпляра виджета"
+declarations = ["WidgetConfigurationActivity"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetActionReceiver.kt"
+purpose = "Приём widget PendingIntent и передача пользовательской команды общему выполнению"
+declarations = ["WidgetActionReceiver"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/WidgetActionWorker.kt"
+purpose = "Выполнение явного действия виджета без отложенной автоматической отправки и повторов"
+declarations = ["WidgetActionWorker"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/DashboardWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета дневного прогресса и Check In/Out, 4×2, передающий обновления общему координатору"
+declarations = ["DashboardWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/DayTimelineWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета временной шкалы WORK_DAY/CALENDAR_DAY, 4×2, передающий обновления общему координатору"
+declarations = ["DayTimelineWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/MonthBalanceWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета накопленного месячного баланса, 4×2, передающий обновления общему координатору"
+declarations = ["MonthBalanceWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/MonthRingWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета месячной нормы и прогресса, 4×2, передающий обновления общему координатору"
+declarations = ["MonthRingWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/CompactWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета времени, баланса и Check In/Out, 4×1, передающий обновления общему координатору"
+declarations = ["CompactWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/SmallWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета времени и дневного баланса, 2×1, передающий обновления общему координатору"
+declarations = ["SmallWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/widgets/TinyWidgetProvider.kt"
+purpose = "Тонкий AppWidgetProvider виджета минимального кольца и основного показателя, 1×1, передающий обновления общему координатору"
+declarations = ["TinyWidgetProvider"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/auth/AuthScreen.kt"
+purpose = "Вход и ошибки авторизации в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["AuthScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/auth/AuthViewModel.kt"
+purpose = "Вход и ошибки авторизации: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["AuthViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/auth/RegisterScreen.kt"
+purpose = "Регистрация с реальными параметрами пользователя в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["RegisterScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/auth/RegisterViewModel.kt"
+purpose = "Регистрация с реальными параметрами пользователя: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["RegisterViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/today/TodayScreen.kt"
+purpose = "Текущий день, действия, сессии, флаги и норма в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["TodayScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/today/TodayViewModel.kt"
+purpose = "Текущий день, действия, сессии, флаги и норма: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["TodayViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/history/HistoryScreen.kt"
+purpose = "Календарь и выбранный день с событиями и поддерживаемыми изменениями в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["HistoryScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/history/HistoryViewModel.kt"
+purpose = "Календарь и выбранный день с событиями и поддерживаемыми изменениями: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["HistoryViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/reports/ReportsScreen.kt"
+purpose = "Диапазоны отчётов, баланс, кольца и исключения в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["ReportsScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/reports/ReportsViewModel.kt"
+purpose = "Диапазоны отчётов, баланс, кольца и исключения: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["ReportsViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/settings/SettingsScreen.kt"
+purpose = "Рабочая норма, обед, timezone, недельный график и локальные предпочтения в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["SettingsScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/settings/SettingsViewModel.kt"
+purpose = "Рабочая норма, обед, timezone, недельный график и локальные предпочтения: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["SettingsViewModel"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/profile/ProfileScreen.kt"
+purpose = "Профиль, RFID, выход и подтверждаемые удаления в Compose с состояниями загрузки, ошибок и отсутствия данных"
+declarations = ["ProfileScreen"]
+
+[[files]]
+path = "app/src/main/java/com/whs31/taptime/app/ui/profile/ProfileViewModel.kt"
+purpose = "Профиль, RFID, выход и подтверждаемые удаления: состояние экрана и вызовы repositories с сохранением при configuration change"
+declarations = ["ProfileViewModel"]
+
+[[files]]
+path = "app/src/main/res/layout/widget_dashboard.xml"
+purpose = "RemoteViews layout виджета dashboard с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_day_timeline.xml"
+purpose = "RemoteViews layout виджета day_timeline с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_month_balance.xml"
+purpose = "RemoteViews layout виджета month_balance с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_month_ring.xml"
+purpose = "RemoteViews layout виджета month_ring с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_compact.xml"
+purpose = "RemoteViews layout виджета compact с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_small.xml"
+purpose = "RemoteViews layout виджета small с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/layout/widget_tiny.xml"
+purpose = "RemoteViews layout виджета tiny с доступными размерами и зонами нажатия"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_dashboard_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для dashboard"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_day_timeline_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для day_timeline"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_month_balance_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для month_balance"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_month_ring_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для month_ring"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_compact_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для compact"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_small_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для small"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/widget_tiny_info.xml"
+purpose = "AppWidgetProvider metadata: размеры, resize и configuration activity для tiny"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/backup_rules.xml"
+purpose = "Исключение секретов и чувствительных данных из Android Auto Backup"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/xml/data_extraction_rules.xml"
+purpose = "Исключение секретов и чувствительного кеша из cloud backup и переноса устройства"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/drawable/ic_launcher_foreground.xml"
+purpose = "Векторный передний слой значка приложения TapTime"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+purpose = "Adaptive icon приложения TapTime"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/values/strings.xml"
+purpose = "Локализованные тексты интерфейса, виджетов и доступности"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/values/colors.xml"
+purpose = "Цветовые ресурсы значка и базовой Android темы"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/values/themes.xml"
+purpose = "Android window theme для Activity и Compose запуска"
+declarations = []
+
+[[files]]
+path = "app/src/main/res/values-ru/strings.xml"
+purpose = "Локализованные тексты интерфейса, виджетов и доступности"
+declarations = []
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/WorkActionCoordinatorTest.kt"
+purpose = "Проверки конкурентных нажатий, отказа и неопределённого исхода мутации"
+declarations = ["WorkActionCoordinatorTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/SessionRepositoryTest.kt"
+purpose = "Проверки восстановления, истечения и очистки сессии"
+declarations = ["SessionRepositoryTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/WorkRepositoryTest.kt"
+purpose = "Проверки загрузки и кеша текущего дня без сети"
+declarations = ["WorkRepositoryTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/SyncCoordinatorTest.kt"
+purpose = "Проверки конкурентной синхронизации и согласованности снимков"
+declarations = ["SyncCoordinatorTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/PowerPolicyTest.kt"
+purpose = "Проверки foreground, background, Battery Saver и интервалов"
+declarations = ["PowerPolicyTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/WidgetRendererTest.kt"
+purpose = "Проверки RemoteViews, Chronometer и состояний без личных данных"
+declarations = ["WidgetRendererTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/WidgetPreferencesTest.kt"
+purpose = "Проверки изоляции настроек по appWidgetId"
+declarations = ["WidgetPreferencesTest"]
+
+[[files]]
+path = "app/src/test/java/com/whs31/taptime/app/WidgetActionTest.kt"
+purpose = "Проверки отсутствия повторов и отложенной отправки команд"
+declarations = ["WidgetActionTest"]
+
+[[files]]
+path = "app/src/androidTest/java/com/whs31/taptime/app/AuthenticationTest.kt"
+purpose = "Проверки входа, регистрации, восстановления и logout на локальном сервере"
+declarations = ["AuthenticationTest"]
+
+[[files]]
+path = "app/src/androidTest/java/com/whs31/taptime/app/TodayScreenTest.kt"
+purpose = "Проверки метрик, состояний и действий экрана Сегодня"
+declarations = ["TodayScreenTest"]
+
+[[files]]
+path = "app/src/androidTest/java/com/whs31/taptime/app/NavigationTest.kt"
+purpose = "Проверки маршрутов и авторизационных переходов"
+declarations = ["NavigationTest"]
+
+[[files]]
+path = "app/src/androidTest/java/com/whs31/taptime/app/WidgetIntegrationTest.kt"
+purpose = "Проверки семи провайдеров, обновлений и очистки при logout"
+declarations = ["WidgetIntegrationTest"]
+
+[[files]]
+path = "app/src/androidTest/java/com/whs31/taptime/app/AdaptiveLayoutTest.kt"
+purpose = "Проверки изменения размеров окна, configuration change и доступности"
+declarations = ["AdaptiveLayoutTest"]

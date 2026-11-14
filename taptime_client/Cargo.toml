@@ -30,4 +30,20 @@ required-features = ["backend"]
 
 [features]
 default = ["backend"]
-backend = ["dep:taptime_core", "dep:taptime_schema", "dep:chrono", "dep:chrono-tz", "dep:prost", "dep:prost-types", "dep:reqwest", "dep:thiserror", "dep:libc"]
+api = ["dep:taptime_core", "dep:taptime_schema", "dep:chrono", "dep:chrono-tz", "dep:prost", "dep:prost-types", "dep:reqwest", "dep:thiserror"]
+backend = ["api", "dep:libc"]
+
+[[test]]
+name = "process"
+path = "tests/process.rs"
+required-features = ["backend"]
+
+[[test]]
+name = "api_mutations"
+path = "tests/api_mutations.rs"
+required-features = ["api"]
+
+[[test]]
+name = "network"
+path = "tests/network.rs"
+required-features = ["api"]
