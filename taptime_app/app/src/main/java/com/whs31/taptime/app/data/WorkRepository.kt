@@ -1,5 +1,6 @@
 package com.whs31.taptime.app.data
 
+import android.os.SystemClock
 import com.whs31.taptime.app.domain.WorkActionCoordinator
 import com.whs31.taptime.app.rust.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,8 +22,13 @@ class WorkRepository(private val gateway: TapTimeGateway, private val account: A
     private val _state = MutableStateFlow(WorkState())
     val state = _state.asStateFlow()
     private val refreshMutex = Mutex()
-    suspend fun refreshToday(): WorkState = refreshMutex.withLock {
-        _state.value = _state.value.copy(loading = true)
+    private val stateLock = Any()
+    private var sampleElapsedRealtimeMillis: Long? = null
+
+    suspend fun refreshToday(): WorkState = refreshMutex.withLock { refreshTodayLocked() }
+
+    private suspend fun refreshTodayLocked(): WorkState {
+        publish(current().copy(loading = true))
         try {
             val user = account.user.value ?: account.refresh()
             val today = LocalDate.now(ZoneId.of(user.timeZone))
@@ -35,43 +41,81 @@ class WorkRepository(private val gateway: TapTimeGateway, private val account: A
             val metrics = gateway.calculateDay(DayCalculationInput(day, user.timeZone, now,
                 summary?.workTargetSeconds ?: day.requiredWorkSeconds, summary?.beforeStartDate ?: false))
             val monthly = gateway.buildReport(ReportInput(start.toString(), today.toString(), dashboard.days))
-            _state.value = WorkState(metrics, dashboard, summary, day, monthly.balanceSeconds, now, loading = false, stale = false)
+            val refreshed = WorkState(metrics, dashboard, summary, day, monthly.balanceSeconds, now, loading = false, stale = false)
+            synchronized(stateLock) {
+                sampleElapsedRealtimeMillis = SystemClock.elapsedRealtime()
+                _state.value = refreshed
+            }
             cache.upsert(DaySnapshotEntity(today.toString(), metrics.workedSeconds, metrics.balanceSeconds,
                 monthly.balanceSeconds,
                 metrics.firstCheckInSeconds, metrics.lastCheckOutSeconds, metrics.isWorking,
                 metrics.requiredWorkSeconds, now))
         } catch (error: Exception) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            _state.value = _state.value.copy(loading = false, stale = true, error = error.message ?: "Connection failed")
+            publish(current().copy(loading = false, stale = true, error = error.message ?: "Connection failed"))
         }
-        _state.value
+        return current()
     }
+
     fun timeline(mode: TimelineMode): TimelineDto? {
-        val current = state.value
+        val current = current()
         val day = current.day ?: return null
         val user = account.user.value ?: return null
         return gateway.buildTimeline(TimelineInput(DayCalculationInput(day, user.timeZone,
-            Instant.now().epochSecond, current.summary?.workTargetSeconds ?: day.requiredWorkSeconds,
+            current.sampleEpoch, current.summary?.workTargetSeconds ?: day.requiredWorkSeconds,
             current.summary?.beforeStartDate ?: false), mode))
     }
+
     fun tick() {
-        val current = _state.value
-        val day = current.day ?: return
+        val (sample, anchor) = synchronized(stateLock) { _state.value to sampleElapsedRealtimeMillis }
+        val day = sample.day ?: return
         val user = account.user.value ?: return
-        val now = Instant.now().epochSecond
+        val elapsed = SystemClock.elapsedRealtime()
+        val now = if (sample.sampleEpoch > 0 && anchor != null) {
+            sample.sampleEpoch + ((elapsed - anchor) / 1000L).coerceAtLeast(0)
+        } else {
+            Instant.now().epochSecond
+        }
         runCatching {
             gateway.calculateDay(DayCalculationInput(day, user.timeZone, now,
-                current.summary?.workTargetSeconds ?: day.requiredWorkSeconds,
-                current.summary?.beforeStartDate ?: false))
-        }.onSuccess { _state.value = current.copy(metrics = it, sampleEpoch = now) }
+                sample.summary?.workTargetSeconds ?: day.requiredWorkSeconds,
+                sample.summary?.beforeStartDate ?: false))
+        }.onSuccess { metrics ->
+            synchronized(stateLock) {
+                val latest = _state.value
+                if (latest.day?.date == day.date && latest.sampleEpoch <= sample.sampleEpoch) {
+                    sampleElapsedRealtimeMillis = elapsed
+                    _state.value = latest.copy(metrics = metrics, sampleEpoch = now)
+                }
+            }
+        }
     }
-    suspend fun perform(checkIn: Boolean) {
-        try { actions.execute(checkIn) } finally { refreshToday() }
+
+    suspend fun perform(checkIn: Boolean) = refreshMutex.withLock {
+        try {
+            actions.execute(checkIn)
+        } finally {
+            refreshTodayLocked()
+        }
     }
+
     suspend fun cached(): DaySnapshotEntity? {
-        val user = account.user.value ?: return null
-        val today = LocalDate.now(ZoneId.of(user.timeZone)).toString()
-        return cache.latest()?.takeIf { it.date == today }
+        val latest = cache.latest() ?: return null
+        val zone = account.user.value?.timeZone ?: return latest
+        val today = LocalDate.now(ZoneId.of(zone)).toString()
+        return latest.takeIf { it.date == today }
     }
-    fun clear() { _state.value = WorkState() }
+
+    fun clear() {
+        synchronized(stateLock) {
+            sampleElapsedRealtimeMillis = null
+            _state.value = WorkState()
+        }
+    }
+
+    private fun current(): WorkState = synchronized(stateLock) { _state.value }
+
+    private fun publish(value: WorkState) {
+        synchronized(stateLock) { _state.value = value }
+    }
 }

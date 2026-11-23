@@ -1,21 +1,32 @@
 package com.whs31.taptime.app.data
 
+import android.util.Log
 import com.whs31.taptime.app.rust.*
 
 class RustTapTimeGateway(endpoint: String, private val onSessionExpired: suspend () -> Unit = {}) : TapTimeGateway {
     private val sdk = TapTimeSdk(endpoint)
-    private suspend fun <T> request(block: suspend () -> T): T {
+    private var pendingRestoreValidation = false
+    private suspend fun <T> request(invalidateOnExpiry: Boolean = true, block: suspend () -> T): T {
         try { return block() }
         catch (error: SdkException.Failure) {
-            if (error.code == SdkErrorCode.UNAUTHENTICATED) onSessionExpired()
+            if (invalidateOnExpiry && isConfirmedServerExpiry(error)) {
+                Log.w(TAG, "server_rejected_active_session")
+                onSessionExpired()
+            }
             throw error
         }
     }
     override suspend fun login(email: String, password: String) = request { sdk.login(email, password) }
     override suspend fun register(input: RegisterInput) = request { sdk.register(input) }
-    override fun restoreToken(token: String) = sdk.setSessionToken(token)
-    override fun clearToken() = sdk.clearSessionToken()
-    override suspend fun fetchUser() = request { sdk.fetchUser() }
+    override fun restoreToken(token: String) {
+        sdk.setSessionToken(token)
+        synchronized(this) { pendingRestoreValidation = true }
+    }
+    override fun clearToken() {
+        synchronized(this) { pendingRestoreValidation = false }
+        sdk.clearSessionToken()
+    }
+    override suspend fun fetchUser() = request(!consumeRestoreValidation()) { sdk.fetchUser() }
     override suspend fun fetchDay(date: String) = request { sdk.fetchDay(date) }
     override suspend fun fetchDashboard(query: DashboardQuery) = request { sdk.fetchDashboard(query) }
     override suspend fun checkIn(input: EventInput) = request { sdk.checkIn(input) }
@@ -31,4 +42,16 @@ class RustTapTimeGateway(endpoint: String, private val onSessionExpired: suspend
     override fun calculateDay(input: DayCalculationInput) = sdk.calculateDay(input)
     override fun buildTimeline(input: TimelineInput) = sdk.buildTimeline(input)
     override fun buildReport(input: ReportInput) = sdk.buildReport(input)
+
+    private fun consumeRestoreValidation(): Boolean = synchronized(this) {
+        pendingRestoreValidation.also { pendingRestoreValidation = false }
+    }
+
+    private fun isConfirmedServerExpiry(error: SdkException.Failure): Boolean =
+        error.code == SdkErrorCode.UNAUTHENTICATED && error.message == SERVER_EXPIRY_MESSAGE
+
+    private companion object {
+        const val TAG = "TapTimeGateway"
+        const val SERVER_EXPIRY_MESSAGE = "Session expired"
+    }
 }

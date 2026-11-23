@@ -1,4 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">TapTime</string><string name="widget_chart">Диаграмма прогресса</string>
+<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">TapTime</string><string name="widget_name_dashboard">Панель</string>
+<string name="widget_description_dashboard">Текущее рабочее время, баланс и действия входа или выхода</string>
+<string name="widget_name_day_timeline">Шкала дня</string>
+<string name="widget_description_day_timeline">Рабочие сессии, перерывы и плановое окончание дня</string>
+<string name="widget_name_month_balance">Баланс месяца</string>
+<string name="widget_description_month_balance">Накопленный баланс и динамика за месяц</string>
+<string name="widget_name_month_ring">Прогресс месяца</string>
+<string name="widget_description_month_ring">Выполнение месячной нормы</string>
+<string name="widget_name_compact">Компактный</string>
+<string name="widget_description_compact">Компактное текущее рабочее время и баланс</string>
+<string name="widget_name_small">Малый</string>
+<string name="widget_description_small">Малое текущее рабочее время и баланс</string>
+<string name="widget_name_tiny">Мини</string>
+<string name="widget_description_tiny">Минимальное текущее рабочее время</string>
+<string name="widget_chart">Диаграмма прогресса</string>
 <string name="widget_sign_in">Войти</string>
 <string name="widget_open_app">Откройте TapTime</string>
 <string name="widget_no_data">Нет данных</string>

@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -24,23 +25,35 @@ class KeystoreTokenStore(context: Context) : TokenStore {
         }.generateKey()
     }
     override fun write(token: String) {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        val ciphertext = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        preferences.edit().putString("value", Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-            .putString("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).commit()
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key())
+            val ciphertext = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
+            check(preferences.edit().putString("value", Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+                .putString("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).commit())
+        } catch (error: Exception) {
+            Log.w(TAG, "token_write_failed type=${error.javaClass.simpleName}")
+            throw error
+        }
     }
     override fun read(): String? {
-        val value = preferences.getString("value", null) ?: return null
-        val iv = preferences.getString("iv", null) ?: return null
+        val value = preferences.getString("value", null)
+        val iv = preferences.getString("iv", null)
+        if (value == null && iv == null) return null
+        if (value == null || iv == null) {
+            Log.w(TAG, "token_read_incomplete_record")
+            throw IllegalStateException("Saved session record is incomplete")
+        }
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
             String(cipher.doFinal(Base64.decode(value, Base64.NO_WRAP)), Charsets.UTF_8)
-        } catch (_: Exception) {
-            clear()
-            null
+        } catch (error: Exception) {
+            Log.w(TAG, "token_read_failed type=${error.javaClass.simpleName}")
+            throw IllegalStateException("Saved session cannot be decrypted", error)
         }
     }
     override fun clear() { preferences.edit().clear().commit() }
+
+    private companion object { const val TAG = "TapTimeTokenStore" }
 }

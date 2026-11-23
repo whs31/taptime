@@ -17,10 +17,28 @@ class SyncCoordinatorTest {
         every { account.user.value } returns null
         coEvery { account.refresh() } returns mockk()
         coEvery { work.refreshToday() } returns WorkRepository.WorkState()
-        every { widgets.hasMonthWidgets() } returns false
         coEvery { widgets.updateAll() } just Runs
+
         val output = SyncCoordinator(account, work, reports, widgets).refresh()
+
         assertTrue(output.stale)
+        coVerify(exactly = 0) { reports.refresh(any(), any()) }
+        coVerify(exactly = 1) { widgets.updateAll() }
+    }
+
+    @Test fun refresh_uses_work_snapshot_for_month_widgets() = runBlocking {
+        val account = mockk<AccountRepository>()
+        val work = mockk<WorkRepository>()
+        val reports = mockk<ReportRepository>()
+        val widgets = mockk<WidgetUpdateCoordinator>()
+        every { account.user.value } returns null
+        coEvery { account.refresh() } returns mockk()
+        coEvery { work.refreshToday() } returns WorkRepository.WorkState(stale = false)
+        coEvery { widgets.updateAll() } just Runs
+
+        val output = SyncCoordinator(account, work, reports, widgets).refresh()
+
+        assertFalse(output.stale)
         coVerify(exactly = 0) { reports.refresh(any(), any()) }
         coVerify(exactly = 1) { widgets.updateAll() }
     }

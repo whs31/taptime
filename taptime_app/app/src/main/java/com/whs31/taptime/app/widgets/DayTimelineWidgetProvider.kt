@@ -17,7 +17,7 @@ class DayTimelineWidgetProvider : AppWidgetProvider() {
                 androidx.work.OneTimeWorkRequestBuilder<com.whs31.taptime.app.sync.DashboardSyncWorker>()
                     .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                     .build())
-            app.widgets.updateKind(WidgetKind.DayTimeline)
+            app.widgets.updateAll()
             } finally { pending?.finish() }
         }
     }

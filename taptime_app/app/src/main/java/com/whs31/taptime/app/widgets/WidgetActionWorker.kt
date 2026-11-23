@@ -3,6 +3,7 @@ package com.whs31.taptime.app.widgets
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import android.util.Log
 import com.whs31.taptime.app.TapTimeApplication
 
 class WidgetActionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -20,9 +21,12 @@ class WidgetActionWorker(context: Context, params: WorkerParameters) : Coroutine
             app.work.perform(inputData.getBoolean(WidgetActionReceiver.CHECK_IN, true))
             app.widgets.updateAll()
             Result.success()
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "action_failed type=${error.javaClass.simpleName}")
             app.widgets.updateAll()
             Result.failure()
         }
     }
+
+    private companion object { const val TAG = "TapTimeWidgetAction" }
 }

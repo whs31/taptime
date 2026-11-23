@@ -1,4 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">TapTime</string><string name="widget_chart">Progress chart</string>
+<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">TapTime</string><string name="widget_name_dashboard">Dashboard</string>
+<string name="widget_description_dashboard">Current work time, balance, and Check In or Check Out actions</string>
+<string name="widget_name_day_timeline">Day timeline</string>
+<string name="widget_description_day_timeline">Today’s work sessions, breaks, and planned end time</string>
+<string name="widget_name_month_balance">Month balance</string>
+<string name="widget_description_month_balance">Monthly accumulated time balance and trend</string>
+<string name="widget_name_month_ring">Month progress</string>
+<string name="widget_description_month_ring">Monthly work target progress</string>
+<string name="widget_name_compact">Compact</string>
+<string name="widget_description_compact">Compact current work time and balance</string>
+<string name="widget_name_small">Small</string>
+<string name="widget_description_small">Small current work time and balance</string>
+<string name="widget_name_tiny">Tiny</string>
+<string name="widget_description_tiny">Tiny current work time</string>
+<string name="widget_chart">Progress chart</string>
 <string name="widget_sign_in">Sign in</string>
 <string name="widget_open_app">Open TapTime</string>
 <string name="widget_no_data">No data</string>

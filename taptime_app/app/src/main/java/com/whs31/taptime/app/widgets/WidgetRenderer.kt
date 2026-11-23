@@ -1,11 +1,10 @@
 package com.whs31.taptime.app.widgets
 
 import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import android.os.SystemClock
 import android.os.Build
+import android.os.SystemClock
 import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.util.TypedValue
@@ -13,10 +12,11 @@ import android.view.View
 import android.widget.RemoteViews
 import com.whs31.taptime.app.MainActivity
 import com.whs31.taptime.app.R
-import com.whs31.taptime.app.ui.components.formatSeconds
+import kotlin.math.abs
 
 class WidgetRenderer(private val context: Context) {
     private val painter = WidgetChartPainter(context)
+
     fun render(widgetId: Int, kind: WidgetKind, state: WidgetState): RemoteViews {
         val view = RemoteViews(context.packageName, kind.layoutId)
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
@@ -41,25 +41,28 @@ class WidgetRenderer(private val context: Context) {
             view.setTextViewText(R.id.widget_value, context.getString(R.string.widget_sign_in))
             view.setTextViewText(R.id.widget_subtitle, context.getString(R.string.widget_open_app))
         } else if (snapshot == null) {
-            view.setTextViewText(R.id.widget_value, "--:--")
+            view.setTextViewText(R.id.widget_value, "--:--:--")
             view.setTextViewText(R.id.widget_subtitle, context.getString(R.string.widget_no_data))
         } else {
-            view.setTextViewText(R.id.widget_value, formatSeconds(snapshot.workedSeconds))
+            view.setTextViewText(R.id.widget_value, formatWidgetSeconds(snapshot.workedSeconds))
             val report = state.report
             view.setTextViewText(R.id.widget_subtitle, when (kind) {
-                WidgetKind.Dashboard -> state.remainingSeconds?.let { context.getString(R.string.widget_remaining, formatSeconds(it)) } ?: context.getString(R.string.widget_no_data)
+                WidgetKind.Dashboard -> state.remainingSeconds?.let { context.getString(R.string.widget_remaining, formatWidgetSeconds(it)) } ?: context.getString(R.string.widget_no_data)
                 WidgetKind.MonthBalance -> report?.let { "${it.rangeStart} — ${it.rangeEnd}" } ?: context.getString(R.string.widget_no_data)
                 WidgetKind.MonthRing -> report?.let { context.getString(R.string.widget_month_values,
-                    formatSeconds(it.workedSeconds), formatSeconds(it.plannedSeconds),
-                    formatSeconds(it.overtimeSeconds), formatSeconds(it.undertimeSeconds)) } ?: context.getString(R.string.widget_no_data)
-                else -> context.getString(R.string.widget_day_balance, formatSeconds(snapshot.balanceSeconds, true))
+                    formatWidgetSeconds(it.workedSeconds), formatWidgetSeconds(it.plannedSeconds),
+                    formatWidgetSeconds(it.overtimeSeconds), formatWidgetSeconds(it.undertimeSeconds)) } ?: context.getString(R.string.widget_no_data)
+                else -> context.getString(R.string.widget_day_balance, formatWidgetSeconds(snapshot.balanceSeconds, true))
             })
             if (kind == WidgetKind.MonthBalance || kind == WidgetKind.MonthRing) {
-                view.setTextViewText(R.id.widget_value, report?.let { formatSeconds(if (kind == WidgetKind.MonthBalance) it.balanceSeconds else it.workedSeconds, kind == WidgetKind.MonthBalance) } ?: "—")
+                view.setTextViewText(R.id.widget_value, when (kind) {
+                    WidgetKind.MonthBalance -> formatWidgetSeconds(report?.balanceSeconds ?: snapshot.monthlyBalanceSeconds, true)
+                    WidgetKind.MonthRing -> report?.let { formatWidgetSeconds(it.workedSeconds) } ?: "—"
+                    else -> error("Unsupported monthly widget")
+                })
             }
-            if (snapshot.isWorking && kind in listOf(WidgetKind.Dashboard, WidgetKind.Compact, WidgetKind.Small) && !state.stale) {
-                val elapsedSinceSnapshot = (System.currentTimeMillis() / 1000L - snapshot.sampledAtEpochSeconds).coerceAtLeast(0)
-                val base = SystemClock.elapsedRealtime() - (snapshot.workedSeconds + elapsedSinceSnapshot) * 1000
+            if (snapshot.isWorking && kind in LIVE_WORK_WIDGETS && !state.stale) {
+                val base = SystemClock.elapsedRealtime() - snapshot.workedSeconds.coerceAtLeast(0) * 1000L
                 view.setChronometer(R.id.widget_clock, base, "%s", true)
                 view.setViewVisibility(R.id.widget_clock, View.VISIBLE)
                 view.setViewVisibility(R.id.widget_value, View.GONE)
@@ -108,5 +111,21 @@ class WidgetRenderer(private val context: Context) {
             }
         }
         return view
+    }
+
+    private fun formatWidgetSeconds(seconds: Long, signed: Boolean = false): String {
+        val absolute = abs(seconds)
+        val sign = if (signed) if (seconds < 0) "−" else "+" else ""
+        return "%s%02d:%02d:%02d".format(sign, absolute / 3600, (absolute % 3600) / 60, absolute % 60)
+    }
+
+    private companion object {
+        val LIVE_WORK_WIDGETS = setOf(
+            WidgetKind.Dashboard,
+            WidgetKind.DayTimeline,
+            WidgetKind.Compact,
+            WidgetKind.Small,
+            WidgetKind.Tiny,
+        )
     }
 }
