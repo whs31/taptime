@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp" android:minHeight="65dp"
+    android:targetCellWidth="4" android:targetCellHeight="1"
+    android:minResizeWidth="250dp" android:minResizeHeight="65dp"
+    android:initialLayout="@layout/widget_compact"
+    android:previewLayout="@layout/widget_compact"
+    android:updatePeriodMillis="1800000"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description_compact"
+    android:configure="com.whs31.taptime.app.widgets.WidgetConfigurationActivity" />

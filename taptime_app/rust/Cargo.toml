@@ -1,0 +1,20 @@
+[package]
+name = "taptime_android_sdk"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+taptime_client = { path = "../../taptime_client", default-features = false, features = ["api"] }
+taptime_core = { path = "../../taptime_core" }
+taptime_schema = { path = "../../taptime_schema", features = ["grpc"] }
+uniffi = { version = "0.32.2", features = ["tokio"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+chrono = "0.4"
+chrono-tz = "0.10"
+prost-types = "0.14"
+uuid = "1"

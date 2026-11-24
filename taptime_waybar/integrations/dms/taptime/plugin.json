@@ -1,0 +1,30 @@
+{
+  "id": "taptime",
+  "name": "TapTime",
+  "description": "Worked time, leave-at estimate and day/month balance from the local TapTime daemon",
+  "version": "0.2.0",
+  "author": "TapTime contributors",
+  "type": "composite",
+  "capabilities": ["daemon", "dankbar-widget", "control-center", "dash-card"],
+  "icon": "schedule",
+  "components": {
+    "daemon": "./TapTimeDaemon.qml",
+    "widget": "./TapTimeWidget.qml",
+    "dashCard": "./TapTimeCard.qml"
+  },
+  "dash": {
+    "card": {
+      "title": "TapTime",
+      "icon": "schedule",
+      "w": 2,
+      "h": 2,
+      "minW": 2,
+      "minH": 1,
+      "maxW": 4,
+      "maxH": 3
+    }
+  },
+  "settings": "./TapTimeSettings.qml",
+  "requires_dms": ">=1.7.0",
+  "permissions": ["settings_read", "settings_write", "process"]
+}

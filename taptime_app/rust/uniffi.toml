@@ -1,0 +1,4 @@
+[bindings.kotlin]
+package_name = "com.whs31.taptime.app.rust"
+cdylib_name = "taptime_android_sdk"
+android = true

@@ -1,0 +1,10 @@
+// Add this file to the "include" list of your Waybar config and put
+// "custom/taptime" into modules-left/center/right.
+{
+  "custom/taptime": {
+    "exec": "taptime-waybar watch",
+    "return-type": "json",
+    "restart-interval": 5,
+    "on-click": "taptime-waybar open"
+  }
+}

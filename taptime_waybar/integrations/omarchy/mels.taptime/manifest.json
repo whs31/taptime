@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "mels.taptime",
+  "name": "TapTime",
+  "version": "1.0.0",
+  "author": "mels",
+  "description": "TapTime work status",
+  "kinds": ["service", "bar-widget"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "TapTime",
+    "description": "Work time and daily goal",
+    "category": "Time",
+    "allowMultiple": false
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TapTime IPC status v1",
+  "description": "Connect to $XDG_RUNTIME_DIR/taptime/status.sock; server sends one JSON line and closes. Version 1. Successful snapshots cached in $XDG_STATE_HOME/taptime/status.json. Restarted snapshots are stale and frozen until sync. Monotonic extrapolation capped at 90 seconds. Unknown additive fields may be ignored.",
+  "type": "object",
+  "required": [
+    "version",
+    "sampled_at",
+    "last_sync",
+    "stale",
+    "error",
+    "date",
+    "worked_seconds",
+    "presence_seconds",
+    "work_target_seconds",
+    "presence_target_seconds",
+    "balance_seconds",
+    "active"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Protocol version, currently 1"
+    },
+    "sampled_at": {
+      "type": "string",
+      "description": "UTC RFC3339 time when counters were sampled"
+    },
+    "last_sync": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "UTC RFC3339 time of last successful API read"
+    },
+    "stale": {
+      "type": "boolean",
+      "description": "Failed synchronization, age over 90 seconds, or changed local date"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "unauthenticated, session_unavailable, api_unavailable or null"
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Account local YYYY-MM-DD; null before first sync"
+    },
+    "worked_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Closed work plus estimated current open session"
+    },
+    "presence_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Local wall-clock presence from first check-in"
+    },
+    "work_target_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Server work target"
+    },
+    "presence_target_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Core required day duration including lunch"
+    },
+    "balance_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Positive overtime, negative undertime; TapTime balance rules"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Open session on the current account-local date"
+    },
+    "local_time": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Account timezone RFC3339, used for notification quiet hours."
+    },
+    "month_balance_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Current month signed balance, including local estimation of today's open session"
+    },
+    "first_check_in": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "First check-in of the account-local day, formatted HH:MM"
+    },
+    "last_check_out": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Last check-out formatted HH:MM, null while session is open"
+    }
+  }
+}

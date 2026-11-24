@@ -85,3 +85,5 @@ format: format-core format-schema
 
 mod web 'taptime_web'
 mod server 'taptime_server'
+mod client 'taptime_client'
+mod waybar 'taptime_waybar'
