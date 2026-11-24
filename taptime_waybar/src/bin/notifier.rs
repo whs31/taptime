@@ -1,59 +1,103 @@
-use std::{fs, io, time::Duration};
+use std::{fs, process::ExitCode, time::Duration};
 
-use taptime_waybar::notifications::{Config, DeliveryState, send};
-#[tokio::main]
-async fn main() -> io::Result<()> {
+use taptime_waybar::{
+  Result,
+  config::Config,
+  exit_code,
+  notifications::{DeliveryState, NotificationConfig, send},
+};
+
+const USAGE: &str = "\
+usage: taptime-notifier [COMMAND]
+
+Without a command, runs the notification loop (one instance per user).
+
+commands:
+  config  validate the [notifications] section and print the effective settings";
+
+const POLL: Duration = Duration::from_secs(5);
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> ExitCode {
+  exit_code("taptime-notifier", run_command().await)
+}
+
+async fn run_command() -> Result<()> {
   match std::env::args().nth(1).as_deref() {
+    None => run().await,
     Some("config") => {
-      let config = Config::load().map_err(io::Error::other)?;
-      println!(
-        "{}",
-        toml::to_string_pretty(&config).map_err(io::Error::other)?
-      );
-      return Ok(());
+      let config = Config::load()?.notifications;
+      config.validate()?;
+      print!("{}", toml::to_string_pretty(&config)?);
+      Ok(())
     }
-    Some("--help") => {
-      println!("taptime-notifier [config]");
-      return Ok(());
+    Some("help" | "-h" | "--help") => {
+      println!("{USAGE}");
+      Ok(())
     }
-    Some(_) => return Err(io::Error::other("usage: taptime-notifier [config]")),
-    None => {}
+    Some(other) => Err(format!("unknown command {other:?}\n\n{USAGE}").into()),
   }
-  let dir = taptime_client::ipc::runtime_dir()?;
+}
+
+async fn run() -> Result<()> {
   let lock = fs::OpenOptions::new()
     .create(true)
     .truncate(false)
     .write(true)
-    .open(dir.join("notifier.lock"))?;
-  lock.try_lock().map_err(io::Error::other)?;
-  let mut state = DeliveryState::load();
-  let mut timer = tokio::time::interval(Duration::from_secs(5));
-  timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    .open(taptime_client::ipc::runtime_dir()?.join("notifier.lock"))?;
+  lock
+    .try_lock()
+    .map_err(|_| "another taptime-notifier is already running")?;
+
   let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-  let work = async {
-    loop {
-      timer.tick().await;
-      let Ok(config) = Config::load() else {
-        continue;
-      };
-      let value = taptime_client::ipc::status()
-        .await
-        .unwrap_or_else(|_| serde_json::json!({"stale":true,"active":false}));
-      let before = serde_json::to_value(&state).ok();
-      for threshold in state.candidates(&value, &config) {
-        if send(&threshold, &config, &value).await.is_ok() {
-          state.confirm(value["date"].as_str().unwrap_or_default(), &threshold);
-          state.save()?;
-        }
-      }
-      if serde_json::to_value(&state).ok() != before {
-        state.save()?;
-      }
-    }
-  };
   tokio::select! {
-    result = work => result,
+    result = poll() => result,
     _ = terminate.recv() => Ok(()),
     _ = tokio::signal::ctrl_c() => Ok(()),
   }
+}
+
+async fn poll() -> Result<()> {
+  let mut state = DeliveryState::load();
+  let mut timer = tokio::time::interval(POLL);
+  timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+  // Only log a config error when it changes, not on every tick.
+  let mut config_error = None;
+  loop {
+    timer.tick().await;
+    // Reloaded every tick so edits apply without a restart.
+    let config = match load_config() {
+      Ok(config) => {
+        config_error = None;
+        config
+      }
+      Err(error) => {
+        let error = error.to_string();
+        if config_error.as_ref() != Some(&error) {
+          eprintln!("invalid config, notifications paused: {error}");
+          config_error = Some(error);
+        }
+        continue;
+      }
+    };
+    let Ok(status) = taptime_client::ipc::snapshot().await else {
+      continue;
+    };
+    let before = serde_json::to_value(&state)?;
+    for threshold in state.candidates(&status, &config) {
+      match send(&threshold, &config, &status).await {
+        Ok(()) => state.confirm(status.date.as_deref().unwrap_or_default(), &threshold),
+        Err(error) => eprintln!("failed to show notification: {error}"),
+      }
+    }
+    if serde_json::to_value(&state)? != before {
+      state.save()?;
+    }
+  }
+}
+
+fn load_config() -> Result<NotificationConfig> {
+  let config = Config::load()?.notifications;
+  config.validate()?;
+  Ok(config)
 }

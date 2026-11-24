@@ -1,107 +1,90 @@
+# TapTime bar module and notifier settings.
+# Installed to ~/.config/taptime-waybar/config.toml; every key is optional.
+# Check it with `just waybar config`.
+
 [display]
+# Placeholders: {icon} {date} {active} {worked} {presence} {work_target}
+# {presence_target} {remaining} {balance} {month_balance}. Unknown ones are kept.
 format = "{icon} {worked}  {balance}"
 icon = "󰥔"
 tooltip = """
 {date}
 {worked} / {work_target}
 {presence} / {presence_target}"""
+# How often `taptime-waybar watch` prints a line (100..60000).
 interval_ms = 1000
+# Opened by `taptime-waybar open` (left click in every frontend).
 dashboard_url = "https://time.whs31.com/dashboard"
-seconds = false
+# Duration components; disabled leading ones are folded into the next.
 hours = true
 minutes = true
+seconds = false
 show_balance = true
+# When the daemon is unreachable: "last" (keep last data), "hide", "indicator".
 unavailable = "last"
 unavailable_text = "Daemon unavailable"
+# Values of {active}.
 active_text = "true"
 inactive_text = "false"
+# CSS classes added to the Waybar module.
 stale_class = "stale"
 positive_class = "positive"
 inactive_class = "inactive"
 disconnected_class = "disconnected"
+# Balance templates; {value} is the unsigned duration.
 positive = "+{value}"
 negative = "-{value}"
 
-
 [notifications]
 enabled = true
+# Language of built-in texts: "ru" or "en".
 language = "ru"
+# Thresholds already passed at startup: "skip" them or deliver the "latest".
 missed_policy = "skip"
+# While the daemon reports stale data: "skip" or "allow" notifications.
 stale_policy = "skip"
 notify_on_completion = false
 notify_on_overtime = false
+# [start, end) minute-of-day ranges, e.g. [[1320, 480]] for 22:00-08:00.
 quiet_hours = []
 
+# Defaults for every threshold; a threshold may override them with its own
+# [notifications.thresholds.options] table.
 [notifications.options]
 persistent = true
 timeout_ms = 5000
-urgency = "normal"
+urgency = "normal" # "low", "normal" or "critical"
 icon = "clock"
 sound = false
 sound_name = "message"
-action_url = ""
+action_url = ""    # clicking the notification opens this URL
 
+# `id` identifies a threshold in the delivery history, so editing its text does
+# not re-send it. Weekdays are 1 (Monday) to 7 (Sunday).
 [[notifications.thresholds]]
 id = "four-hours"
 remaining_minutes = 240
-enabled = true
 title = "TapTime"
 body = "До дневной цели осталось {remaining}. Отработано {worked}"
-weekdays = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-]
+weekdays = [1, 2, 3, 4, 5, 6, 7]
 
 [[notifications.thresholds]]
 id = "two-hours"
 remaining_minutes = 120
-enabled = true
 title = "TapTime"
 body = "До дневной цели осталось {remaining}. Отработано {worked}"
-weekdays = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-]
+weekdays = [1, 2, 3, 4, 5, 6, 7]
 
 [[notifications.thresholds]]
 id = "one-hour"
 remaining_minutes = 60
-enabled = true
 title = "TapTime"
 body = "До дневной цели осталось {remaining}. Отработано {worked}"
-weekdays = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-]
+weekdays = [1, 2, 3, 4, 5, 6, 7]
 
 [[notifications.thresholds]]
 id = "half-hour"
 remaining_minutes = 30
-enabled = true
 title = "TapTime"
 body = "До дневной цели осталось {remaining}. Отработано {worked}"
-weekdays = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-]
-
+weekdays = [1, 2, 3, 4, 5, 6, 7]

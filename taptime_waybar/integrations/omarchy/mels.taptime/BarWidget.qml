@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import qs.Commons as Commons
 import qs.Ui
 
@@ -10,12 +9,10 @@ BarWidget {
   readonly property var tapService: bar && bar.shell
     ? bar.shell.serviceFor(moduleName) : null
   readonly property var current: tapService
-    ? tapService.status : ({ text: "󰥔 --:--", class: ["stale"] })
+    ? tapService.status : ({ text: "󰥔 --:--", class: ["stale"], alt: "stale" })
 
   readonly property bool positive: current.balance_positive === true
-  readonly property bool stale: (current.class || []).some(
-    c => ["stale", "unavailable", "disconnected"].includes(c)
-  )
+  readonly property bool stale: current.alt !== "ready"
 
   readonly property bool opened: panelLoader.item
     ? panelLoader.item.opened === true : false
@@ -74,8 +71,8 @@ BarWidget {
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.LeftButton) {
         root.close()
-        if (root.bar)
-          root.bar.run("xdg-open https://time.whs31.com/dashboard")
+        if (root.tapService)
+          root.tapService.openDashboard()
       } else if (mouseButton === Qt.RightButton ||
                  mouseButton === Qt.MiddleButton) {
         root.toggle()

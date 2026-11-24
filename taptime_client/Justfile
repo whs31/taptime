@@ -1,0 +1,59 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+bin_dir := home_directory() / ".local/bin"
+unit_dir := config_directory() / "systemd/user"
+binaries := "taptime taptime-daemon"
+
+[private]
+default:
+    @just --justfile "{{ source_file() }}" --list
+
+# Build release binaries
+build:
+    cargo build --release --locked
+
+test:
+    cargo test --locked
+
+lint:
+    cargo clippy --locked --all-targets -- -D warnings
+
+fmt:
+    cargo +nightly fmt
+
+# Install the CLI and daemon to ~/.local/bin and (re)start taptime.service
+install: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Rename into place so running executables keep their old inode.
+    for bin in {{ binaries }}; do
+        install -Dm755 "target/release/$bin" "{{ bin_dir }}/$bin.new"
+        mv -f "{{ bin_dir }}/$bin.new" "{{ bin_dir }}/$bin"
+    done
+    install -Dm644 systemd/taptime.service "{{ unit_dir }}/taptime.service"
+    systemctl --user daemon-reload
+    systemctl --user enable taptime.service
+    systemctl --user restart taptime.service
+    echo "taptime.service is running. Sign in once with: just client login"
+
+# Stop the daemon and remove its files; the login session and cache are kept
+uninstall:
+    -systemctl --user disable --now taptime.service
+    rm -f {{ prepend(bin_dir / "", binaries) }} "{{ unit_dir }}/taptime.service"
+    systemctl --user daemon-reload
+
+# Sign in interactively (credentials are read from the TTY)
+login:
+    "{{ bin_dir }}/taptime" login
+
+logout:
+    "{{ bin_dir }}/taptime" logout
+
+# Show the service state and the current snapshot
+status:
+    -systemctl --user --no-pager status taptime.service
+    "{{ bin_dir }}/taptime" status --json
+
+# Follow the daemon log
+logs:
+    journalctl --user -u taptime.service -f

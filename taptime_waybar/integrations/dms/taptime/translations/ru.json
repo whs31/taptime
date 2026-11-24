@@ -1,0 +1,173 @@
+{
+  "%1 left": {
+    "%1 left": "ещё %1"
+  },
+  "%1 overtime": {
+    "%1 overtime": "%1 переработки"
+  },
+  "Bar text": {
+    "Bar text": "Текст на панели"
+  },
+  "Breaks": {
+    "Breaks": "Перерывы"
+  },
+  "Can't reach the TapTime daemon": {
+    "Can't reach the TapTime daemon": "Нет связи с демоном TapTime"
+  },
+  "Checked out at": {
+    "Checked out at": "Ушёл в"
+  },
+  "Copied %1": {
+    "Copied %1": "Скопировано: %1"
+  },
+  "Copy": {
+    "Copy": "Копировать"
+  },
+  "Daemon offline": {
+    "Daemon offline": "Демон недоступен"
+  },
+  "Dashboard": {
+    "Dashboard": "Дашборд"
+  },
+  "Data may be outdated, times are estimated": {
+    "Data may be outdated, times are estimated": "Данные могли устареть, время рассчитано примерно"
+  },
+  "Day %1": {
+    "Day %1": "День %1"
+  },
+  "Day balance %1": {
+    "Day balance %1": "Баланс за день %1"
+  },
+  "Highlighted once it turns positive": {
+    "Highlighted once it turns positive": "Подсвечивается, когда становится положительным"
+  },
+  "In office %1 / %2": {
+    "In office %1 / %2": "В офисе %1 / %2"
+  },
+  "In since %1": {
+    "In since %1": "На работе с %1"
+  },
+  "It is missing or the config is invalid. Reinstall from the repository:": {
+    "It is missing or the config is invalid. Reinstall from the repository:": "Он не установлен или конфиг содержит ошибку. Переустановите из репозитория:"
+  },
+  "Leave-at time": {
+    "Leave-at time": "Время ухода"
+  },
+  "Left click": {
+    "Left click": "Левый клик"
+  },
+  "Month": {
+    "Month": "Месяц"
+  },
+  "Month %1": {
+    "Month %1": "Месяц %1"
+  },
+  "Month balance %1": {
+    "Month balance %1": "Баланс за месяц %1"
+  },
+  "Never synced": {
+    "Never synced": "Ещё не синхронизировано"
+  },
+  "Not checked in": {
+    "Not checked in": "Не отмечен"
+  },
+  "Not checked in today": {
+    "Not checked in today": "Сегодня ещё не отмечен"
+  },
+  "Not running": {
+    "Not running": "Не запущен"
+  },
+  "Open dashboard": {
+    "Open dashboard": "Открыть дашборд"
+  },
+  "Open details": {
+    "Open details": "Открыть подробности"
+  },
+  "Out at %1": {
+    "Out at %1": "Ушёл в %1"
+  },
+  "Overtime": {
+    "Overtime": "Переработка"
+  },
+  "Progress ring": {
+    "Progress ring": "Кольцо прогресса"
+  },
+  "Restart daemon": {
+    "Restart daemon": "Перезапустить демон"
+  },
+  "Restarting taptime.service": {
+    "Restarting taptime.service": "Перезапуск taptime.service"
+  },
+  "Right click does the other one": {
+    "Right click does the other one": "Правый клик делает другое действие"
+  },
+  "Ring fills up towards the daily target; the dot is filled while checked in": {
+    "Ring fills up towards the daily target; the dot is filled while checked in": "Кольцо заполняется до дневной цели; точка закрашена, пока вы на работе"
+  },
+  "Ring only": {
+    "Ring only": "Только кольцо"
+  },
+  "Show day balance": {
+    "Show day balance": "Показывать баланс за день"
+  },
+  "Sign in once from a terminal; the daemon picks it up automatically.": {
+    "Sign in once from a terminal; the daemon picks it up automatically.": "Войдите один раз в терминале — демон подхватит вход сам."
+  },
+  "Signed out": {
+    "Signed out": "Не выполнен вход"
+  },
+  "Signed out of TapTime": {
+    "Signed out of TapTime": "Вход в TapTime не выполнен"
+  },
+  "Synced %1 min ago": {
+    "Synced %1 min ago": "Синхронизировано %1 мин назад"
+  },
+  "Synced at %1": {
+    "Synced at %1": "Синхронизировано в %1"
+  },
+  "Synced just now": {
+    "Synced just now": "Синхронизировано только что"
+  },
+  "TapTime server is unreachable, times are estimated": {
+    "TapTime server is unreachable, times are estimated": "Сервер TapTime недоступен, время рассчитано примерно"
+  },
+  "Target reached at": {
+    "Target reached at": "Цель достигнута в"
+  },
+  "Time format, dashboard URL and notifications are configured in ~/.config/taptime-waybar/config.toml. Toggle the details with: dms ipc call widget toggle taptime": {
+    "Time format, dashboard URL and notifications are configured in ~/.config/taptime-waybar/config.toml. Toggle the details with: dms ipc call widget toggle taptime": "Формат времени, адрес дашборда и уведомления настраиваются в ~/.config/taptime-waybar/config.toml. Открыть подробности с клавиатуры: dms ipc call widget toggle taptime"
+  },
+  "Time left": {
+    "Time left": "Оставшееся время"
+  },
+  "Today": {
+    "Today": "День"
+  },
+  "Waiting for data": {
+    "Waiting for data": "Ожидание данных"
+  },
+  "What the bar pill shows next to the progress ring": {
+    "What the bar pill shows next to the progress ring": "Что показывать рядом с кольцом прогресса"
+  },
+  "Worked time": {
+    "Worked time": "Отработанное время"
+  },
+  "You can leave at": {
+    "You can leave at": "Можно уходить в"
+  },
+  "in %1": {
+    "in %1": "через %1"
+  },
+  "of %1": {
+    "of %1": "из %1"
+  },
+  "taptime-waybar is not running": {
+    "taptime-waybar is not running": "taptime-waybar не запущен"
+  },
+  "taptime.service is stopped or crashed.": {
+    "taptime.service is stopped or crashed.": "taptime.service остановлен или упал."
+  },
+  "until %1": {
+    "until %1": "до %1"
+  }
+}

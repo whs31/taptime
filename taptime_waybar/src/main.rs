@@ -1,43 +1,68 @@
-use taptime_waybar::config;
-mod render;
+use std::{io::Write, process::ExitCode, time::Duration};
 
-use std::{io::Write, time::Duration};
+use taptime_waybar::{Result, config::Config, exit_code, open_url, render::render};
 
-use serde_json::Value;
+const USAGE: &str = "\
+usage: taptime-waybar [COMMAND]
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  let config = config::Config::load()?;
-  let command = std::env::args().nth(1).unwrap_or_else(|| "once".into());
-  if command == "open" {
-    std::process::Command::new("xdg-open")
-      .arg(&config.dashboard_url)
-      .spawn()?;
+commands:
+  once    print one Waybar JSON line (default)
+  watch   print a JSON line every display.interval_ms
+  open    open display.dashboard_url in the browser
+  config  validate the config file and print the effective settings";
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> ExitCode {
+  exit_code("taptime-waybar", run_command().await)
+}
+
+async fn run_command() -> Result<()> {
+  let command = std::env::args().nth(1);
+  let command = command.as_deref().unwrap_or("once");
+  if matches!(command, "help" | "-h" | "--help") {
+    println!("{USAGE}");
     return Ok(());
   }
-  if command == "config" {
-    println!("{}", toml::to_string_pretty(&config)?);
-    return Ok(());
+
+  let config = Config::load()?;
+  match command {
+    "config" => {
+      config.validate()?;
+      print!("{}", toml::to_string_pretty(&config)?);
+      Ok(())
+    }
+    "open" => {
+      config.display.validate()?;
+      Ok(open_url(&config.display.dashboard_url)?)
+    }
+    "once" | "watch" => {
+      config.display.validate()?;
+      stream(&config, command == "watch").await
+    }
+    other => Err(format!("unknown command {other:?}\n\n{USAGE}").into()),
   }
-  if command != "once" && command != "watch" {
-    return Err("usage: taptime-waybar once|watch|config".into());
-  }
-  let mut last = Value::Null;
+}
+
+async fn stream(config: &Config, watch: bool) -> Result<()> {
+  let mut ticker = tokio::time::interval(Duration::from_millis(config.display.interval_ms));
+  ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+  let mut last = None;
   let mut stdout = std::io::stdout().lock();
   loop {
-    let disconnected = match taptime_client::ipc::status().await {
-      Ok(value) => {
-        last = value;
+    ticker.tick().await;
+    let disconnected = match taptime_client::ipc::snapshot().await {
+      Ok(status) => {
+        last = Some(status);
         false
       }
       Err(_) => true,
     };
-    writeln!(stdout, "{}", render::render(&last, &config, disconnected))?;
+    let output = render(last.as_ref(), &config.display, disconnected);
+    serde_json::to_writer(&mut stdout, &output)?;
+    writeln!(stdout)?;
     stdout.flush()?;
-    if command == "once" {
-      break;
+    if !watch {
+      return Ok(());
     }
-    std::thread::sleep(Duration::from_millis(config.interval_ms));
   }
-  Ok(())
 }

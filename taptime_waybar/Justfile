@@ -1,0 +1,81 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Quickshell frontends: `just waybar dms install`, `just waybar omarchy install`
+mod dms 'integrations/dms'
+mod omarchy 'integrations/omarchy'
+
+bin_dir := home_directory() / ".local/bin"
+unit_dir := config_directory() / "systemd/user"
+config_file := config_directory() / "taptime-waybar/config.toml"
+binaries := "taptime-waybar taptime-notifier"
+
+[private]
+default:
+    @just --justfile "{{ source_file() }}" --list --list-submodules
+
+# Build release binaries
+build:
+    cargo build --release --locked
+
+test:
+    cargo test --locked
+
+lint:
+    cargo clippy --locked --all-targets -- -D warnings
+
+fmt:
+    cargo +nightly fmt
+
+# Stream module output from a debug build
+run command="watch":
+    cargo run --bin taptime-waybar -- {{ command }}
+
+# Install the daemon, bar module and notifier (keeps an existing config)
+install: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just --justfile ../taptime_client/Justfile install
+    # Rename into place so running executables keep their old inode.
+    for bin in {{ binaries }}; do
+        install -Dm755 "target/release/$bin" "{{ bin_dir }}/$bin.new"
+        mv -f "{{ bin_dir }}/$bin.new" "{{ bin_dir }}/$bin"
+    done
+    install -Dm644 systemd/taptime-notifier.service "{{ unit_dir }}/taptime-notifier.service"
+    if [[ -e "{{ config_file }}" ]]; then
+        echo "Keeping existing {{ config_file }}"
+    else
+        install -Dm600 examples/config.toml "{{ config_file }}"
+        echo "Created {{ config_file }}"
+    fi
+    "{{ bin_dir }}/taptime-waybar" config >/dev/null
+    systemctl --user daemon-reload
+    systemctl --user enable taptime-notifier.service
+    systemctl --user restart taptime-notifier.service
+    # Bars respawn `taptime-waybar watch` on exit, picking up the new binary.
+    pkill -x taptime-waybar || true
+    echo "Installed. For Waybar, see integrations/waybar/; for shells, run 'just waybar dms install' or 'just waybar omarchy install'."
+
+# Remove the bar module and notifier; config, state and the daemon are kept
+uninstall:
+    -systemctl --user disable --now taptime-notifier.service
+    rm -f {{ prepend(bin_dir / "", binaries) }} "{{ unit_dir }}/taptime-notifier.service"
+    systemctl --user daemon-reload
+    @echo "Kept {{ config_file }}. Remove the daemon with: just client uninstall"
+
+# Validate the config file and print the effective settings
+config:
+    "{{ bin_dir }}/taptime-waybar" config
+
+# Open the config file in $EDITOR, then validate it
+edit:
+    "${EDITOR:-vi}" "{{ config_file }}"
+    "{{ bin_dir }}/taptime-waybar" config >/dev/null && echo "Config is valid"
+
+# Show both services and the current module output
+status:
+    -systemctl --user --no-pager status taptime.service taptime-notifier.service
+    "{{ bin_dir }}/taptime-waybar" once
+
+# Follow the notifier log
+logs:
+    journalctl --user -u taptime-notifier.service -f

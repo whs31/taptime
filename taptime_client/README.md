@@ -7,9 +7,9 @@ Run commands from the repository root.
 ## Build and verify
 
 ```sh
-cargo build --release --manifest-path taptime_client/Cargo.toml
-cargo test --manifest-path taptime_client/Cargo.toml
-cargo clippy --manifest-path taptime_client/Cargo.toml --all-targets -- -D warnings
+just client build
+just client test
+just client lint
 ```
 
 ## Login and status
@@ -27,17 +27,15 @@ taptime_client/target/release/taptime status --json
 
 `login` prompts for credentials on the local TTY. Do not put credentials in shell arguments or commit session files. To clear the stored login, run `taptime logout`. The CLI also supports `status` and `--help`.
 
-## Install manually (Linux)
+## Install (Linux)
 
 ```sh
-install -Dm755 taptime_client/target/release/taptime "$HOME/.local/bin/taptime"
-install -Dm755 taptime_client/target/release/taptime-daemon "$HOME/.local/bin/taptime-daemon"
-install -Dm644 taptime_client/systemd/taptime.service "$HOME/.config/systemd/user/taptime.service"
-systemctl --user daemon-reload
-systemctl --user enable --now taptime.service
+just client install    # build, copy to ~/.local/bin, enable taptime.service
+just client login
+just client status
 ```
 
-Check status with `systemctl --user status taptime.service` and `taptime status --json`. Stop or disable with `systemctl --user disable --now taptime.service`. For an update, rebuild, stop the service, copy the new binaries, then start it again. Do not overwrite running executables during an update. Uninstall by disabling the service and removing only the files listed above; the session and cached state are not automatically deleted.
+`just client uninstall` disables the service and removes the binaries and unit; the session and cached state are kept. `just waybar install` also runs this, see [`taptime_waybar`](../taptime_waybar).
 
 ## IPC contract
 
